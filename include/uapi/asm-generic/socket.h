@@ -90,4 +90,7 @@
 /* START_OF_KNOX_NPA */
 #define SO_SET_DNS_PID		58
 /* END_OF_KNOX_NPA */
+#define SO_ATTACH_BPF		50
+#define SO_DETACH_BPF		SO_DETACH_FILTER
+
 #endif /* __ASM_GENERIC_SOCKET_H */
