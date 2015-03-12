@@ -77,6 +77,8 @@ reqsk_alloc(const struct request_sock_ops *ops, struct sock *sk_listener)
 		req->rsk_ops = ops;
 		sock_hold(sk_listener);
 		req->rsk_listener = sk_listener;
+		atomic64_set(&req->__req_common.skc_cookie, 0);
+		sock_net_set((struct sock *)req, sock_net(sk_listener));
 	}
 	return req;
 }
