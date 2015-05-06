@@ -361,8 +361,8 @@ static bool convert_bpf_extensions(struct sock_filter *fp,
  *   new_prog = kmalloc(sizeof(struct bpf_insn) * new_len);
  *   bpf_convert_filter(old_prog, old_len, new_prog, &new_len);
  */
-int bpf_convert_filter(struct sock_filter *prog, int len,
-		       struct bpf_insn *new_prog, int *new_len)
+static int bpf_convert_filter(struct sock_filter *prog, int len,
+			      struct bpf_insn *new_prog, int *new_len)
 {
 	int new_flen = 0, pass = 0, target, i;
 	struct bpf_insn *new_insn;
@@ -790,7 +790,8 @@ static bool bpf_check_basics_ok(const struct sock_filter *filter,
  *
  * Returns 0 if the rule set is legal or -EINVAL if not.
  */
-int bpf_check_classic(const struct sock_filter *filter, unsigned int flen)
+static int bpf_check_classic(const struct sock_filter *filter,
+			     unsigned int flen)
 {
 	bool anc_found;
 	int pc;
@@ -869,7 +870,6 @@ int bpf_check_classic(const struct sock_filter *filter, unsigned int flen)
 
 	return -EINVAL;
 }
-EXPORT_SYMBOL(bpf_check_classic);
 
 static int bpf_prog_store_orig_filter(struct bpf_prog *fp,
 				      const struct sock_fprog *fprog)
@@ -1020,11 +1020,9 @@ static struct bpf_prog *bpf_migrate_filter(struct bpf_prog *fp)
 		 */
 		goto out_err_free;
 
-	/* We are guaranteed to never error here with cBPF to eBPF
-	 * transitions, since there's no issue with type compatibility
-	 * checks on program arrays.
-	 */
 	fp = bpf_prog_select_runtime(fp, &err);
+	if (err)
+		goto out_err_free;
 
 	kfree(old_prog);
 	return fp;
