@@ -377,7 +377,8 @@ static int bpf_convert_filter(struct sock_filter *prog, int len,
 		return -EINVAL;
 
 	if (new_prog) {
-		addrs = kcalloc(len, sizeof(*addrs), GFP_KERNEL);
+		addrs = kcalloc(len, sizeof(*addrs),
+				GFP_KERNEL | __GFP_NOWARN);
 		if (!addrs)
 			return -ENOMEM;
 	}
@@ -883,7 +884,9 @@ static int bpf_prog_store_orig_filter(struct bpf_prog *fp,
 
 	fkprog = fp->orig_prog;
 	fkprog->len = fprog->len;
-	fkprog->filter = kmemdup(fp->insns, fsize, GFP_KERNEL);
+
+	fkprog->filter = kmemdup(fp->insns, fsize,
+				 GFP_KERNEL | __GFP_NOWARN);
 	if (!fkprog->filter) {
 		kfree(fp->orig_prog);
 		return -ENOMEM;
@@ -985,7 +988,7 @@ static struct bpf_prog *bpf_migrate_filter(struct bpf_prog *fp)
 	 * pass. At this time, the user BPF is stored in fp->insns.
 	 */
 	old_prog = kmemdup(fp->insns, old_len * sizeof(struct sock_filter),
-			   GFP_KERNEL);
+			   GFP_KERNEL | __GFP_NOWARN);
 	if (!old_prog) {
 		err = -ENOMEM;
 		goto out_err;
