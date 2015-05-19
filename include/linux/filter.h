@@ -364,7 +364,7 @@ static inline int sk_filter(struct sock *sk, struct sk_buff *skb)
 	return sk_filter_trim_cap(sk, skb, 1);
 }
 
-void bpf_prog_select_runtime(struct bpf_prog *fp);
+int bpf_prog_select_runtime(struct bpf_prog *fp);
 void bpf_prog_free(struct bpf_prog *fp);
 
 int bpf_convert_filter(struct sock_filter *prog, int len,
