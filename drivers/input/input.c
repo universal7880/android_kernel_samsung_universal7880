@@ -1150,6 +1150,7 @@ static int input_disable_device(struct input_dev *dev)
  */
 static void input_dev_release_keys(struct input_dev *dev)
 {
+	bool need_sync = false;
 	int code;
 	bool need_sync = false;
 
