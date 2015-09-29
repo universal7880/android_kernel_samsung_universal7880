@@ -809,7 +809,7 @@ void bpf_jit_compile(struct bpf_prog *fp)
 	if (jit.start) {
 		set_memory_ro((unsigned long)header, header->pages);
 		fp->bpf_func = (void *) jit.start;
-		fp->jited = true;
+		fp->jited = 1;
 	}
 out:
 	kfree(addrs);
