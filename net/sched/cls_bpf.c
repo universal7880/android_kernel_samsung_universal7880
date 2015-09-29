@@ -304,6 +304,9 @@ static int cls_bpf_prog_from_efd(struct nlattr **tb, struct cls_bpf_prog *prog,
 	prog->bpf_name = name;
 	prog->filter = fp;
 
+	if (fp->dst_needed)
+		netif_keep_dst(qdisc_dev(tp->q));
+
 	return 0;
 }
 
