@@ -7262,6 +7262,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		}
 	}
 
+	/* symmetric to unaccount_event() in _free_event() */
+	account_event(event);
+
 	return event;
 
 err_pmu:
@@ -7605,8 +7608,6 @@ SYSCALL_DEFINE5(perf_event_open,
 			goto err_alloc;
 		}
 	}
-
-	account_event(event);
 
 	/*
 	 * Special case software events and allow them to be part of
