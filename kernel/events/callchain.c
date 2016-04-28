@@ -102,12 +102,18 @@ fail:
 	return -ENOMEM;
 }
 
-int get_callchain_buffers(void)
+int get_callchain_buffers(int event_max_stack)
 {
 	int err = 0;
 	int count;
 
 	mutex_lock(&callchain_mutex);
+
+	if (event_max_stack < 0 ||
+	    event_max_stack > sysctl_perf_event_max_stack) {
+		err = -EOVERFLOW;
+		goto unlock;
+	}
 
 	count = atomic_inc_return(&nr_callchain_events);
 	if (WARN_ON_ONCE(count < 1)) {
@@ -121,6 +127,7 @@ exit:
 	if (err)
 		atomic_dec(&nr_callchain_events);
 
+unlock:
 	mutex_unlock(&callchain_mutex);
 
 	return err;
@@ -166,11 +173,13 @@ perf_callchain(struct perf_event *event, struct pt_regs *regs)
 	bool user   = !event->attr.exclude_callchain_user;
 	/* Disallow cross-task user callchains. */
 	bool crosstask = event->ctx->task && event->ctx->task != current;
+	const u32 max_stack = event->attr.sample_max_stack ?:
+			      sysctl_perf_event_max_stack;
 
 	if (!kernel && !user)
 		return NULL;
 
-	return get_perf_callchain(regs, 0, kernel, user, sysctl_perf_event_max_stack, crosstask, true);
+	return get_perf_callchain(regs, 0, kernel, user, max_stack, crosstask, true);
 }
 
 struct perf_callchain_entry *
@@ -180,6 +189,9 @@ get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
 	struct perf_callchain_entry *entry;
 	struct perf_callchain_entry_ctx ctx;
 	int rctx;
+
+	if (max_stack > sysctl_perf_event_max_stack || init_nr > max_stack)
+		return NULL;
 
 	entry = get_callchain_entry(&rctx);
 	if (rctx == -1)

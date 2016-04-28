@@ -7424,7 +7424,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 
 	if (!event->parent) {
 		if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN) {
-			err = get_callchain_buffers();
+			err = get_callchain_buffers(attr->sample_max_stack);
 			if (err)
 				goto err_pmu;
 		}
@@ -7503,6 +7503,10 @@ static int perf_copy_attr(struct perf_event_attr __user *uattr,
 		return -EFAULT;
 
 	if (attr->__reserved_1)
+		return -EINVAL;
+
+	if (attr->clockid || attr->sample_regs_intr || attr->aux_watermark ||
+	    attr->__reserved_2)
 		return -EINVAL;
 
 	if (attr->sample_type & ~(PERF_SAMPLE_MAX-1))
