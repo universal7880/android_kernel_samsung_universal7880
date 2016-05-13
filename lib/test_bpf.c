@@ -1868,7 +1868,10 @@ static struct bpf_prog *generate_filter(int which, int *err)
 		memcpy(fp->insnsi, tests[which].u.insns_int,
 		       fp->len * sizeof(struct bpf_insn));
 
-		bpf_prog_select_runtime(fp);
+		/* We cannot error here as we don't need type compatibility
+		 * checks.
+		 */
+		fp = bpf_prog_select_runtime(fp, err);
 		break;
 	}
 
