@@ -87,7 +87,7 @@
 #define DRIVER_AUTHOR "Marko Friedemann <mfr@bmx-chemnitz.de>"
 #define DRIVER_DESC "X-Box pad driver"
 
-#define XPAD_PKT_LEN 32
+#define XPAD_PKT_LEN 64
 
 /*
  * xbox d-pads should map to buttons, as is required for DDR pads
