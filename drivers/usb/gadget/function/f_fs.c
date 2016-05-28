@@ -2606,7 +2606,7 @@ static int ffs_func_bind(struct usb_configuration *c,
 	       ffs->raw_descs_length);
 
 	memset(data->inums, 0xff, sizeof data->inums);
-	for (ret = ffs->eps_count; ret; --ret)
+	for (ret = 0; ret < ffs->eps_count; ret++)
 		data->eps[ret].num = -1;
 
 	/* Save pointers */
