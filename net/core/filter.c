@@ -775,6 +775,9 @@ int bpf_check_classic(const struct sock_filter *filter, unsigned int flen)
 	bool anc_found;
 	int pc;
 
+	if (!bpf_check_basics_ok(filter, flen))
+		return -EINVAL;
+
 	/* Check the filter code now */
 	for (pc = 0; pc < flen; pc++) {
 		const struct sock_filter *ftest = &filter[pc];
