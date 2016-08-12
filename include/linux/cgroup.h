@@ -308,6 +308,23 @@ static inline struct css_set *task_css_set(struct task_struct *task)
 }
 
 /**
+ * task_under_cgroup_hierarchy - test task's membership of cgroup ancestry
+ * @task: the task to be tested
+ * @ancestor: possible ancestor of @task's cgroup
+ *
+ * Tests whether @task's default cgroup hierarchy is a descendant of @ancestor.
+ * It follows all the same rules as cgroup_is_descendant, and only applies
+ * to the default hierarchy.
+ */
+static inline bool task_under_cgroup_hierarchy(struct task_struct *task,
+					       struct cgroup *ancestor)
+{
+	struct css_set *cset = task_css_set(task);
+
+	return cgroup_is_descendant(cset->dfl_cgrp, ancestor);
+}
+
+/**
  * task_css - obtain css for (task, subsys)
  * @task: the target task
  * @subsys_id: the target subsystem ID
