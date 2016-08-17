@@ -2374,7 +2374,7 @@ static const struct bpf_func_proto bpf_skb_event_output_proto = {
 	.arg5_type	= ARG_CONST_SIZE,
 };
 
-#ifdef CONFIG_SOCK_CGROUP_DATA
+
 static u64 bpf_skb_under_cgroup(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
 {
 	struct sk_buff *skb = (struct sk_buff *)(long)r1;
@@ -2395,7 +2395,7 @@ static u64 bpf_skb_under_cgroup(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
 	if (unlikely(!cgrp))
 		return -EAGAIN;
 
-	return cgroup_is_descendant(sock_cgroup_ptr(&sk->sk_cgrp_data), cgrp);
+	return sk_under_cgroup_hierarchy(sk, cgrp);
 }
 
 static const struct bpf_func_proto bpf_skb_under_cgroup_proto = {
@@ -2406,7 +2406,6 @@ static const struct bpf_func_proto bpf_skb_under_cgroup_proto = {
 	.arg2_type	= ARG_CONST_MAP_PTR,
 	.arg3_type	= ARG_ANYTHING,
 };
-#endif
 
 BPF_CALL_1(bpf_get_socket_cookie, struct sk_buff *, skb)
 {
@@ -2614,10 +2613,8 @@ tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_skb_event_output_proto;
 	case BPF_FUNC_get_smp_processor_id:
 		return &bpf_get_smp_processor_id_proto;
-#ifdef CONFIG_SOCK_CGROUP_DATA
 	case BPF_FUNC_skb_under_cgroup:
 		return &bpf_skb_under_cgroup_proto;
-#endif
 	default:
 		return sk_filter_func_proto(func_id, prog);
 	}
