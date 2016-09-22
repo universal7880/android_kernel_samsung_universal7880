@@ -535,6 +535,13 @@ enum bpf_func_id {
 	 */
 	BPF_FUNC_csum_update,
 
+	/**
+	 * bpf_set_hash_invalid(skb)
+	 * Invalidate the current skb hash.
+	 * @skb: pointer to skb
+	 */
+	BPF_FUNC_set_hash_invalid = 41,
+
 
 	/**
 	 * u64 bpf_get_socket_cookie(skb)
@@ -556,6 +563,7 @@ enum bpf_func_id {
 
 	BPF_FUNC_bind = 64,
 	BPF_FUNC_skb_load_bytes_relative = 68,
+
 	__BPF_FUNC_MAX_ID,
 };
 
