@@ -1292,7 +1292,7 @@ u64 bpf_user_rnd_u32(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
 
 	state = &get_cpu_var(bpf_user_rnd_state);
 	res = prandom_u32_state(state);
-	put_cpu_var(state);
+	put_cpu_var(bpf_user_rnd_state);
 
 	return res;
 }
