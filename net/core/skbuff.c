@@ -4256,13 +4256,17 @@ EXPORT_SYMBOL(skb_ensure_writable);
 static int __skb_vlan_pop(struct sk_buff *skb, u16 *vlan_tci)
 {
 	struct vlan_hdr *vhdr;
-	unsigned int offset = skb->data - skb_mac_header(skb);
+	int offset = skb->data - skb_mac_header(skb);
 	int err;
 
-	__skb_push(skb, offset);
+	if (WARN_ONCE(offset,
+		      "__skb_vlan_pop got skb with skb->data not at mac header (offset %d)\n",
+		      offset))
+		return -EINVAL;
+
 	err = skb_ensure_writable(skb, VLAN_ETH_HLEN);
 	if (unlikely(err))
-		goto pull;
+		return err;
 
 	skb_postpull_rcsum(skb, skb->data + (2 * ETH_ALEN), VLAN_HLEN);
 
@@ -4279,12 +4283,13 @@ static int __skb_vlan_pop(struct sk_buff *skb, u16 *vlan_tci)
 		skb_set_network_header(skb, ETH_HLEN);
 
 	skb_reset_mac_len(skb);
-pull:
-	__skb_pull(skb, offset);
 
 	return err;
 }
 
+/* Pop a VLAN tag from hardware metadata or the payload.
+ * Expects skb->data at the MAC header.
+ */
 int skb_vlan_pop(struct sk_buff *skb)
 {
 	u16 vlan_tci;
@@ -4319,24 +4324,25 @@ int skb_vlan_pop(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(skb_vlan_pop);
 
+/* Push a VLAN tag into hardware metadata or the payload.
+ * Expects skb->data at the MAC header.
+ */
 int skb_vlan_push(struct sk_buff *skb, __be16 vlan_proto, u16 vlan_tci)
 {
 	if (vlan_tx_tag_present(skb)) {
-		unsigned int offset = skb->data - skb_mac_header(skb);
+		int offset = skb->data - skb_mac_header(skb);
 		int err;
 
-		/* __vlan_insert_tag expect skb->data pointing to mac header.
-		 * So change skb->data before calling it and change back to
-		 * original position later
-		 */
-		__skb_push(skb, offset);
+		if (WARN_ONCE(offset,
+			      "skb_vlan_push got skb with skb->data not at mac header (offset %d)\n",
+			      offset))
+			return -EINVAL;
 		err = __vlan_insert_tag(skb, skb->vlan_proto,
 					vlan_tx_tag_get(skb));
 		if (err)
 			return err;
 		skb->protocol = skb->vlan_proto;
 		skb->mac_len += VLAN_HLEN;
-		__skb_pull(skb, offset);
 
 		if (skb->ip_summed == CHECKSUM_COMPLETE)
 			skb->csum = csum_add(skb->csum, csum_partial(skb->data
