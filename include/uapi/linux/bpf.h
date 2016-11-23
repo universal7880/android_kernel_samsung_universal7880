@@ -79,7 +79,9 @@ enum bpf_cmd {
 	BPF_PROG_LOAD,
 	BPF_OBJ_PIN,
 	BPF_OBJ_GET,
-	/* Command IDs 8-10 are reserved for attach/detach/test-run. */
+	BPF_PROG_ATTACH,
+	BPF_PROG_DETACH,
+	/* Command ID 10 is reserved for test-run. */
 	BPF_PROG_GET_NEXT_ID = 11,
 	BPF_MAP_GET_NEXT_ID,
 	BPF_PROG_GET_FD_BY_ID,
@@ -205,6 +207,11 @@ union bpf_attr {
 		__u32		info_len;
 		__aligned_u64	info;
 	} info;
+	struct { /* anonymous struct used by BPF_PROG_ATTACH/DETACH commands */
+		__u32		target_fd;	/* container object to attach to */
+		__u32		attach_bpf_fd;	/* eBPF program to attach */
+		__u32		attach_type;
+	};
 } __attribute__((aligned(8)));
 
 /* integer value in 'imm' field of BPF_CALL instruction selects which helper

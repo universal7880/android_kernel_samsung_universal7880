@@ -1014,10 +1014,6 @@ static bool cgroup_tryget(struct cgroup *cgrp)
 	return css_tryget(&cgrp->self);
 }
 
-static void cgroup_put(struct cgroup *cgrp)
-{
-	css_put(&cgrp->self);
-}
 
 /**
  * cgroup_refresh_child_subsys_mask - update child_subsys_mask

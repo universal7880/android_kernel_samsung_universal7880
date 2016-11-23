@@ -97,6 +97,11 @@ static inline void css_put(struct cgroup_subsys_state *css)
 		percpu_ref_put(&css->refcnt);
 }
 
+static inline void cgroup_put(struct cgroup *cgrp)
+{
+	css_put(&cgrp->self);
+}
+
 extern struct cgroup_root cgrp_dfl_root;
 extern struct css_set init_css_set;
 
