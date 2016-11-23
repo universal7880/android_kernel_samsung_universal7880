@@ -15,6 +15,7 @@
 #include <linux/rcupdate.h>
 #include <linux/percpu-refcount.h>
 #include <linux/workqueue.h>
+#include <linux/bpf-cgroup.h>
 
 #ifdef CONFIG_CGROUPS
 
@@ -169,6 +170,9 @@ struct cgroup {
 
 	/* used to schedule release agent */
 	struct work_struct release_agent_work;
+
+	/* programs attached to this cgroup and inherited by descendants */
+	struct cgroup_bpf bpf;
 };
 
 #define MAX_CGROUP_ROOT_NAMELEN 64

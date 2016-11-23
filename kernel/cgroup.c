@@ -4395,6 +4395,7 @@ static void css_release_work_fn(struct work_struct *work)
 		 * cgrp->kn->priv backpointer.
 		 */
 		RCU_INIT_POINTER(*(void __rcu __force **)&cgrp->kn->priv, NULL);
+		cgroup_bpf_put(cgrp);
 	}
 
 	mutex_unlock(&cgroup_mutex);
@@ -4649,6 +4650,8 @@ static int cgroup_mkdir(struct kernfs_node *parent_kn, const char *name,
 		cgrp->subtree_control = parent->subtree_control;
 		cgroup_refresh_child_subsys_mask(cgrp);
 	}
+
+	cgroup_bpf_inherit(cgrp, parent);
 
 	kernfs_activate(kn);
 
@@ -5643,3 +5646,16 @@ struct cgroup_subsys debug_cgrp_subsys = {
 	.legacy_cftypes = debug_files,
 };
 #endif /* CONFIG_CGROUP_DEBUG */
+
+#ifdef CONFIG_CGROUP_BPF
+void cgroup_bpf_update(struct cgroup *cgrp,
+		       struct bpf_prog *prog,
+		       enum bpf_attach_type type)
+{
+	struct cgroup *parent = cgroup_parent(cgrp);
+
+	mutex_lock(&cgroup_mutex);
+	__cgroup_bpf_update(cgrp, parent, prog, type);
+	mutex_unlock(&cgroup_mutex);
+}
+#endif /* CONFIG_CGROUP_BPF */
