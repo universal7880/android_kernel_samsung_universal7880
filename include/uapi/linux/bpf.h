@@ -115,6 +115,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_XDP,
 	/* Program ID 7 is reserved for perf events. */
 	BPF_PROG_TYPE_CGROUP_SKB = 8,
+	BPF_PROG_TYPE_CGROUP_SOCK,
 };
 
 /* If BPF_F_STRICT_ALIGNMENT is used in BPF_PROG_LOAD command, the
@@ -126,6 +127,7 @@ enum bpf_prog_type {
 enum bpf_attach_type {
 	BPF_CGROUP_INET_INGRESS,
 	BPF_CGROUP_INET_EGRESS,
+	BPF_CGROUP_INET_SOCK_CREATE,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -601,6 +603,10 @@ struct __sk_buff {
 struct bpf_tunnel_key {
 	__u32 tunnel_id;
 	__u32 remote_ipv4;
+};
+
+struct bpf_sock {
+	__u32 bound_dev_if;
 };
 
 #define BPF_TAG_SIZE	8
