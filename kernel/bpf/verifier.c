@@ -1212,6 +1212,10 @@ static int check_map_func_compatibility(struct bpf_map *map, int func_id)
 		    func_id != BPF_FUNC_current_task_under_cgroup)
 			goto error;
 		break;
+	case BPF_MAP_TYPE_ARRAY_OF_MAPS:
+		if (func_id != BPF_FUNC_map_lookup_elem)
+			goto error;
+		break;
 	default:
 		break;
 	}
@@ -2297,14 +2301,19 @@ static void mark_map_reg(struct bpf_reg_state *regs, u32 regno, u32 id,
 	struct bpf_reg_state *reg = &regs[regno];
 
 	if (reg->type == PTR_TO_MAP_VALUE_OR_NULL && reg->id == id) {
-		reg->type = type;
+		if (type == UNKNOWN_VALUE) {
+			__mark_reg_unknown_value(regs, regno);
+		} else if (reg->map_ptr->inner_map_meta) {
+			reg->type = CONST_PTR_TO_MAP;
+			reg->map_ptr = reg->map_ptr->inner_map_meta;
+		} else {
+			reg->type = type;
+		}
 		/* We don't need id from this point onwards anymore, thus we
 		 * should better reset it, so that state pruning has chances
 		 * to take effect.
 		 */
 		reg->id = 0;
-		if (type == UNKNOWN_VALUE)
-			__mark_reg_unknown_value(regs, regno);
 	}
 }
 
