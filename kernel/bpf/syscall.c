@@ -318,7 +318,9 @@ static int map_create(union bpf_attr *attr)
 	int f_flags;
 	int err;
 
-	err = CHECK_ATTR(BPF_MAP_CREATE) || attr->inner_map_fd || attr->numa_node;
+	err = CHECK_ATTR(BPF_MAP_CREATE) || attr->numa_node ||
+	      (attr->inner_map_fd &&
+	       attr->map_type != BPF_MAP_TYPE_ARRAY_OF_MAPS);
 	if (err)
 		return -EINVAL;
 
@@ -506,6 +508,8 @@ static int map_lookup_elem(union bpf_attr *attr)
 		err = bpf_percpu_array_copy(map, key, value);
 	} else if (map->map_type == BPF_MAP_TYPE_STACK_TRACE) {
 		err = bpf_stackmap_copy(map, key, value);
+	} else if (map->map_type == BPF_MAP_TYPE_ARRAY_OF_MAPS) {
+		err = -ENOTSUPP;
 	} else {
 		rcu_read_lock();
 		ptr = map->ops->map_lookup_elem(map, key);
@@ -596,7 +600,8 @@ static int map_update_elem(union bpf_attr *attr)
 		err = bpf_percpu_array_update(map, key, value, attr->flags);
 	} else if (map->map_type == BPF_MAP_TYPE_PERF_EVENT_ARRAY ||
 		   map->map_type == BPF_MAP_TYPE_PROG_ARRAY ||
-		   map->map_type == BPF_MAP_TYPE_CGROUP_ARRAY) {
+		   map->map_type == BPF_MAP_TYPE_CGROUP_ARRAY ||
+		   map->map_type == BPF_MAP_TYPE_ARRAY_OF_MAPS) {
 		rcu_read_lock();
 		err = bpf_fd_array_map_update_elem(map, f.file, key, value,
 						   attr->flags);
