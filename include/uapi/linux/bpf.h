@@ -521,6 +521,15 @@ enum bpf_func_id {
 	BPF_FUNC_csum_update,
 
 
+	/**
+	 * u64 bpf_get_socket_cookie(skb)
+	 *     Get the cookie for the socket stored inside sk_buff.
+	 *     @skb: pointer to skb
+	 *     Return: 8 Bytes non-decreasing number on success or 0 if the socket
+	 *     field is missing inside sk_buff
+	 */
+	BPF_FUNC_get_socket_cookie = 46,
+
 	__BPF_FUNC_MAX_ID,
 };
 
