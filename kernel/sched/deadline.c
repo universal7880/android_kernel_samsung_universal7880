@@ -604,6 +604,8 @@ static inline void dl_check_constrained_dl(struct sched_dl_entity *dl_se)
 		if (unlikely(dl_se->dl_boosted || !start_dl_timer(dl_se, dl_se->dl_boosted)))
 			return;
 		dl_se->dl_throttled = 1;
+		if (dl_se->runtime > 0)
+			dl_se->runtime = 0;
 	}
 }
 
