@@ -79,6 +79,9 @@ enum bpf_cmd {
 	BPF_PROG_LOAD,
 	BPF_OBJ_PIN,
 	BPF_OBJ_GET,
+	/* Command IDs 8-10 are reserved for attach/detach/test-run. */
+	BPF_PROG_GET_NEXT_ID = 11,
+	BPF_MAP_GET_NEXT_ID,
 };
 
 enum bpf_map_type {
@@ -160,6 +163,11 @@ union bpf_attr {
 		__aligned_u64	pathname;
 		__u32		bpf_fd;
 		__u32		file_flags;
+	};
+
+	struct { /* anonymous struct used by BPF_*_GET_NEXT_ID */
+		__u32		start_id;
+		__u32		next_id;
 	};
 } __attribute__((aligned(8)));
 
