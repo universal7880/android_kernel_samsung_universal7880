@@ -564,6 +564,9 @@ enum bpf_func_id {
 	 */
 	BPF_FUNC_get_socket_uid,
 
+	/* Grow or shrink room at the network header; flags must be zero. */
+	BPF_FUNC_skb_adjust_room = 50,
+
 	BPF_FUNC_bind = 64,
 	BPF_FUNC_skb_load_bytes_relative = 68,
 	BPF_FUNC_sk_fullsock = 95,
@@ -604,6 +607,11 @@ enum bpf_func_id {
 #define BPF_F_CURRENT_CPU		BPF_F_INDEX_MASK
 /* BPF_FUNC_perf_event_output for sk_buff input context. */
 #define BPF_F_CTXLEN_MASK		(0xfffffULL << 32)
+
+/* Mode for BPF_FUNC_skb_adjust_room. */
+enum bpf_adj_room_mode {
+	BPF_ADJ_ROOM_NET,
+};
 
 /* Mode for BPF_FUNC_skb_load_bytes_relative. */
 enum bpf_hdr_start_off {
