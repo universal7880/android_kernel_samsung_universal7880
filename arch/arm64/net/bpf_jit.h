@@ -42,6 +42,10 @@
 	aarch64_insn_gen_cond_branch_imm(0, offset, cond)
 #define A64_COND_EQ	AARCH64_INSN_COND_EQ /* == */
 #define A64_COND_NE	AARCH64_INSN_COND_NE /* != */
+#define A64_COND_CC	AARCH64_INSN_COND_CC /* unsigned < */
+#define A64_COND_LS	AARCH64_INSN_COND_LS /* unsigned <= */
+#define A64_COND_LT	AARCH64_INSN_COND_LT /* signed < */
+#define A64_COND_LE	AARCH64_INSN_COND_LE /* signed <= */
 #define A64_COND_CS	AARCH64_INSN_COND_CS /* unsigned >= */
 #define A64_COND_HI	AARCH64_INSN_COND_HI /* unsigned > */
 #define A64_COND_GE	AARCH64_INSN_COND_GE /* signed >= */

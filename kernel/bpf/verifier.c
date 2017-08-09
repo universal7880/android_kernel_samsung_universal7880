@@ -270,11 +270,15 @@ static const char *const bpf_jmp_string[16] = {
 	[BPF_JA >> 4]   = "jmp",
 	[BPF_JEQ >> 4]  = "==",
 	[BPF_JGT >> 4]  = ">",
+	[BPF_JLT >> 4]  = "<",
 	[BPF_JGE >> 4]  = ">=",
+	[BPF_JLE >> 4]  = "<=",
 	[BPF_JSET >> 4] = "&",
 	[BPF_JNE >> 4]  = "!=",
 	[BPF_JSGT >> 4] = "s>",
+	[BPF_JSLT >> 4] = "s<",
 	[BPF_JSGE >> 4] = "s>=",
+	[BPF_JSLE >> 4] = "s<=",
 	[BPF_CALL >> 4] = "call",
 	[BPF_EXIT >> 4] = "exit",
 };
@@ -2106,6 +2110,22 @@ static void reg_set_min_max(struct bpf_reg_state *true_reg,
 	bool value_from_signed = true;
 	bool is_range = true;
 
+	/* The complementary comparison refines the opposite branch. */
+	switch (opcode) {
+	case BPF_JLT:
+		reg_set_min_max(false_reg, true_reg, val, BPF_JGE);
+		return;
+	case BPF_JLE:
+		reg_set_min_max(false_reg, true_reg, val, BPF_JGT);
+		return;
+	case BPF_JSLT:
+		reg_set_min_max(false_reg, true_reg, val, BPF_JSGE);
+		return;
+	case BPF_JSLE:
+		reg_set_min_max(false_reg, true_reg, val, BPF_JSGT);
+		return;
+	}
+
 	switch (opcode) {
 	case BPF_JEQ:
 		/* If this is false then we know nothing Jon Snow, but if it is
@@ -2184,6 +2204,22 @@ static void reg_set_min_max_inv(struct bpf_reg_state *true_reg,
 {
 	bool value_from_signed = true;
 	bool is_range = true;
+
+	/* The complementary comparison refines the opposite branch. */
+	switch (opcode) {
+	case BPF_JLT:
+		reg_set_min_max_inv(false_reg, true_reg, val, BPF_JGE);
+		return;
+	case BPF_JLE:
+		reg_set_min_max_inv(false_reg, true_reg, val, BPF_JGT);
+		return;
+	case BPF_JSLT:
+		reg_set_min_max_inv(false_reg, true_reg, val, BPF_JSGE);
+		return;
+	case BPF_JSLE:
+		reg_set_min_max_inv(false_reg, true_reg, val, BPF_JSGT);
+		return;
+	}
 
 	switch (opcode) {
 	case BPF_JEQ:
@@ -2300,7 +2336,7 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 	u8 opcode = BPF_OP(insn->code);
 	int err;
 
-	if (opcode > BPF_EXIT) {
+	if (opcode > BPF_JSLE || opcode == BPF_CALL || opcode == BPF_EXIT) {
 		verbose("invalid BPF_JMP opcode %x\n", opcode);
 		return -EINVAL;
 	}
@@ -2394,6 +2430,14 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 		   dst_reg->type == PTR_TO_PACKET_END &&
 		   regs[insn->src_reg].type == PTR_TO_PACKET) {
 		find_good_pkt_pointers(other_branch, &regs[insn->src_reg]);
+	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JLE &&
+		   dst_reg->type == PTR_TO_PACKET &&
+		   regs[insn->src_reg].type == PTR_TO_PACKET_END) {
+		find_good_pkt_pointers(other_branch, dst_reg);
+	} else if (BPF_SRC(insn->code) == BPF_X && opcode == BPF_JLT &&
+		   dst_reg->type == PTR_TO_PACKET_END &&
+		   regs[insn->src_reg].type == PTR_TO_PACKET) {
+		find_good_pkt_pointers(this_branch, &regs[insn->src_reg]);
 	} else if (is_pointer_value(env, insn->dst_reg)) {
 		verbose("R%d pointer comparison prohibited\n", insn->dst_reg);
 		return -EACCES;
