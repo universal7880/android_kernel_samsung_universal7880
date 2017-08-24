@@ -495,14 +495,23 @@ static void loop_make_request(struct request_queue *q, struct bio *old_bio)
 	BUG_ON(!lo || (rw != READ && rw != WRITE));
 
 	spin_lock_irq(&lo->lo_lock);
+retry:
 	if (lo->lo_state != Lo_bound)
 		goto out;
+	/* Internal switch bios drain the worker while normal I/O waits. */
+	if (old_bio->bi_bdev && lo->lo_queue_frozen) {
+		wait_event_lock_irq(lo->lo_req_wait,
+				    !lo->lo_queue_frozen, lo->lo_lock);
+		goto retry;
+	}
 	if (unlikely(rw == WRITE && (lo->lo_flags & LO_FLAGS_READ_ONLY)))
 		goto out;
-	if (lo->lo_bio_count >= q->nr_congestion_on)
+	if (lo->lo_bio_count >= q->nr_congestion_on) {
 		wait_event_lock_irq(lo->lo_req_wait,
 				    lo->lo_bio_count < q->nr_congestion_off,
 				    lo->lo_lock);
+		goto retry;
+	}
 	loop_add_bio(lo, old_bio);
 	wake_up(&lo->lo_event);
 	spin_unlock_irq(&lo->lo_lock);
@@ -601,6 +610,29 @@ static int loop_flush(struct loop_device *lo)
 		return 0;
 
 	return loop_switch(lo, NULL);
+}
+
+/* Called with lo_ctl_mutex held; the worker must remain runnable. */
+static void loop_unfreeze_queue(struct loop_device *lo)
+{
+	spin_lock_irq(&lo->lo_lock);
+	lo->lo_queue_frozen = false;
+	wake_up_all(&lo->lo_req_wait);
+	spin_unlock_irq(&lo->lo_lock);
+}
+
+static int loop_freeze_queue(struct loop_device *lo)
+{
+	int err;
+
+	spin_lock_irq(&lo->lo_lock);
+	lo->lo_queue_frozen = true;
+	spin_unlock_irq(&lo->lo_lock);
+
+	err = loop_flush(lo);
+	if (err)
+		loop_unfreeze_queue(lo);
+	return err;
 }
 
 /*
@@ -1041,6 +1073,7 @@ static int loop_clr_fd(struct loop_device *lo)
 	memset(lo->lo_encrypt_key, 0, LO_KEY_SIZE);
 	memset(lo->lo_crypt_name, 0, LO_NAME_SIZE);
 	memset(lo->lo_file_name, 0, LO_NAME_SIZE);
+	blk_queue_logical_block_size(lo->lo_queue, 512);
 	if (bdev) {
 		bdput(bdev);
 		invalidate_bdev(bdev);
@@ -1294,6 +1327,26 @@ static int loop_set_capacity(struct loop_device *lo, struct block_device *bdev)
 	return figure_loop_size(lo, lo->lo_offset, lo->lo_sizelimit);
 }
 
+static int loop_set_block_size(struct loop_device *lo, unsigned long arg)
+{
+	int err;
+
+	if (lo->lo_state != Lo_bound)
+		return -ENXIO;
+	if (arg < 512 || arg > PAGE_SIZE || !is_power_of_2(arg))
+		return -EINVAL;
+	if (lo->lo_queue->limits.logical_block_size == arg)
+		return 0;
+
+	err = loop_freeze_queue(lo);
+	if (err)
+		return err;
+
+	blk_queue_logical_block_size(lo->lo_queue, arg);
+	loop_unfreeze_queue(lo);
+	return 0;
+}
+
 static int lo_ioctl(struct block_device *bdev, fmode_t mode,
 	unsigned int cmd, unsigned long arg)
 {
@@ -1336,6 +1389,11 @@ static int lo_ioctl(struct block_device *bdev, fmode_t mode,
 		err = -EPERM;
 		if ((mode & FMODE_WRITE) || capable(CAP_SYS_ADMIN))
 			err = loop_set_capacity(lo, bdev);
+		break;
+	case LOOP_SET_BLOCK_SIZE:
+		err = -EPERM;
+		if ((mode & FMODE_WRITE) || capable(CAP_SYS_ADMIN))
+			err = loop_set_block_size(lo, arg);
 		break;
 	default:
 		err = lo->ioctl ? lo->ioctl(lo, cmd, arg) : -EINVAL;
