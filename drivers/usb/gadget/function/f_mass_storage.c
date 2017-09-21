@@ -240,18 +240,6 @@ static const char fsg_string_interface[] = "Android Mass Storage";
 struct fsg_dev;
 struct fsg_common;
 
-/* FSF callback functions */
-struct fsg_operations {
-	/*
-	 * Callback function to call when thread exits.  If no
-	 * callback is set or it returns value lower then zero MSF
-	 * will force eject all LUNs it operates on (including those
-	 * marked as non-removable or with prevent_medium_removal flag
-	 * set).
-	 */
-	int (*thread_exits)(struct fsg_common *common);
-};
-
 /* Data shared by all the FSG instances. */
 struct fsg_common {
 	struct usb_gadget	*gadget;
@@ -303,8 +291,6 @@ struct fsg_common {
 	struct completion	thread_notifier;
 	struct task_struct	*thread_task;
 
-	/* Callback functions. */
-	const struct fsg_operations	*ops;
 	/* Gadget's private data. */
 	void			*private_data;
 
@@ -334,8 +320,6 @@ struct fsg_config {
 		char nofua;
 	} luns[FSG_MAX_LUNS];
 
-	/* Callback functions. */
-	const struct fsg_operations	*ops;
 	/* Gadget's private data. */
 	void			*private_data;
 
@@ -2977,6 +2961,8 @@ static void handle_exception(struct fsg_common *common)
 static int fsg_main_thread(void *common_)
 {
 	struct fsg_common	*common = common_;
+	struct fsg_lun		*curlun;
+	unsigned int		i;
 
 	/*
 	 * Allow the thread to be killed by a signal, but set the signal mask
@@ -3038,21 +3024,19 @@ static int fsg_main_thread(void *common_)
 	common->thread_task = NULL;
 	spin_unlock_irq(&common->lock);
 
-	if (!common->ops || !common->ops->thread_exits
-	 || common->ops->thread_exits(common) < 0) {
-		struct fsg_lun *curlun = common->luns;
-		unsigned i = common->nluns;
+	/* Eject media from all LUNs. */
+	curlun = common->luns;
+	i = common->nluns;
 
-		down_write(&common->filesem);
-		for (; i--; ++curlun) {
-			if (!fsg_lun_is_open(curlun))
-				continue;
+	down_write(&common->filesem);
+	for (; i--; ++curlun) {
+		if (!fsg_lun_is_open(curlun))
+			continue;
 
-			fsg_lun_close(curlun);
-			curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
-		}
-		up_write(&common->filesem);
+		fsg_lun_close(curlun);
+		curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
 	}
+	up_write(&common->filesem);
 
 	/* Let fsg_unbind() know the thread has exited */
 	complete_and_exit(&common->thread_notifier, 0);
@@ -3223,7 +3207,6 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	common->ops = cfg->ops;
 	common->private_data = cfg->private_data;
 
 	common->gadget = gadget;
@@ -3589,7 +3572,6 @@ fsg_config_from_params(struct fsg_config *cfg,
 	cfg->vendor_name = 0;
 	cfg->product_name = 0;
 
-	cfg->ops = NULL;
 	cfg->private_data = NULL;
 
 	/* Finalise */
