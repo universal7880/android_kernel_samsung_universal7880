@@ -309,7 +309,7 @@ static int bpf_obj_name_cpy(char *dst, const char *src)
 	return 0;
 }
 
-#define BPF_MAP_CREATE_LAST_FIELD map_flags
+#define BPF_MAP_CREATE_LAST_FIELD map_name
 /* called via syscall */
 static int map_create(union bpf_attr *attr)
 {
@@ -317,7 +317,7 @@ static int map_create(union bpf_attr *attr)
 	int f_flags;
 	int err;
 
-	err = CHECK_ATTR(BPF_MAP_CREATE);
+	err = CHECK_ATTR(BPF_MAP_CREATE) || attr->inner_map_fd || attr->numa_node;
 	if (err)
 		return -EINVAL;
 
@@ -331,6 +331,10 @@ static int map_create(union bpf_attr *attr)
 		return PTR_ERR(map);
 
 	map->map_flags = attr->map_flags;
+	err = bpf_obj_name_cpy(map->name, attr->map_name);
+	if (err)
+		goto free_map_nouncharge;
+
 	atomic_set(&map->refcnt, 1);
 	atomic_set(&map->usercnt, 1);
 
@@ -1285,6 +1289,7 @@ static int bpf_map_get_info_by_fd(struct bpf_map *map,
 	info.value_size = map->value_size;
 	info.max_entries = map->max_entries;
 	info.map_flags = map->map_flags;
+	memcpy(info.name, map->name, sizeof(map->name));
 
 	if (copy_to_user(uinfo, &info, info_len) ||
 	    put_user(info_len, &uattr->info.info_len))
