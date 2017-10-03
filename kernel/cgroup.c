@@ -227,14 +227,6 @@ static void cgroup_idr_remove(struct idr *idr, int id)
 	spin_unlock_bh(&cgroup_idr_lock);
 }
 
-static struct cgroup *cgroup_parent(struct cgroup *cgrp)
-{
-	struct cgroup_subsys_state *parent_css = cgrp->self.parent;
-
-	if (parent_css)
-		return container_of(parent_css, struct cgroup, self);
-	return NULL;
-}
 
 /**
  * cgroup_css - obtain a cgroup's css for the specified subsystem
@@ -1578,6 +1570,8 @@ static void init_cgroup_root(struct cgroup_root *root,
 	atomic_set(&root->nr_cgrps, 1);
 	cgrp->root = root;
 	init_cgroup_housekeeping(cgrp);
+	/* A root has no programs; inheritance uses the static empty array. */
+	BUG_ON(cgroup_bpf_inherit(cgrp));
 	idr_init(&root->cgroup_idr);
 
 	root->flags = opts->flags;
@@ -4582,6 +4576,10 @@ static int cgroup_mkdir(struct kernfs_node *parent_kn, const char *name,
 	cgrp->self.parent = &parent->self;
 	cgrp->root = root;
 
+	ret = cgroup_bpf_inherit(cgrp);
+	if (ret)
+		goto out_free_id;
+
 	if (notify_on_release(parent))
 		set_bit(CGRP_NOTIFY_ON_RELEASE, &cgrp->flags);
 
@@ -4647,14 +4645,13 @@ static int cgroup_mkdir(struct kernfs_node *parent_kn, const char *name,
 		cgroup_refresh_child_subsys_mask(cgrp);
 	}
 
-	cgroup_bpf_inherit(cgrp, parent);
-
 	kernfs_activate(kn);
 
 	ret = 0;
 	goto out_unlock;
 
 out_free_id:
+	cgroup_bpf_put(cgrp);
 	cgroup_idr_remove(&root->cgroup_idr, cgrp->id);
 out_cancel_ref:
 	percpu_ref_exit(&cgrp->self.refcnt);
@@ -5644,14 +5641,25 @@ struct cgroup_subsys debug_cgrp_subsys = {
 #endif /* CONFIG_CGROUP_DEBUG */
 
 #ifdef CONFIG_CGROUP_BPF
-void cgroup_bpf_update(struct cgroup *cgrp,
-		       struct bpf_prog *prog,
-		       enum bpf_attach_type type)
+int cgroup_bpf_attach(struct cgroup *cgrp, struct bpf_prog *prog,
+		      enum bpf_attach_type type, u32 flags)
 {
-	struct cgroup *parent = cgroup_parent(cgrp);
+	int ret;
 
 	mutex_lock(&cgroup_mutex);
-	__cgroup_bpf_update(cgrp, parent, prog, type);
+	ret = __cgroup_bpf_attach(cgrp, prog, type, flags);
 	mutex_unlock(&cgroup_mutex);
+	return ret;
+}
+
+int cgroup_bpf_detach(struct cgroup *cgrp, struct bpf_prog *prog,
+		      enum bpf_attach_type type, u32 flags)
+{
+	int ret;
+
+	mutex_lock(&cgroup_mutex);
+	ret = __cgroup_bpf_detach(cgrp, prog, type, flags);
+	mutex_unlock(&cgroup_mutex);
+	return ret;
 }
 #endif /* CONFIG_CGROUP_BPF */
