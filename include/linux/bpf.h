@@ -48,7 +48,7 @@ struct bpf_map {
 	const struct bpf_map_ops *ops;
 	struct work_struct work;
 	atomic_t usercnt;
-	u8 name[BPF_OBJ_NAME_LEN];
+	char name[BPF_OBJ_NAME_LEN];
 #ifdef CONFIG_SECURITY
 	void *security;
 #endif
@@ -187,7 +187,7 @@ struct bpf_prog_aux {
 	struct bpf_prog *prog;
 	struct user_struct *user;
 	u64 load_time; /* ns since boottime */
-	u8 name[BPF_OBJ_NAME_LEN];
+	char name[BPF_OBJ_NAME_LEN];
 
 #ifdef CONFIG_SECURITY
 	void *security;

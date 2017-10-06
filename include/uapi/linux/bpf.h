@@ -150,7 +150,7 @@ union bpf_attr {
 		__u32	map_flags;	/* prealloc or not */
 		__u32	inner_map_fd;	/* reserved, must be zero */
 		__u32	numa_node;	/* reserved, must be zero */
-		__u8	map_name[BPF_OBJ_NAME_LEN];
+		char	map_name[BPF_OBJ_NAME_LEN];
 	};
 
 	struct { /* anonymous struct used by BPF_MAP_*_ELEM commands */
@@ -173,7 +173,7 @@ union bpf_attr {
 		__aligned_u64	log_buf;	/* user supplied buffer */
 		__u32		kern_version;	/* checked when prog_type=kprobe */
 		__u32		prog_flags;
-		__u8		prog_name[BPF_OBJ_NAME_LEN];
+		char		prog_name[BPF_OBJ_NAME_LEN];
 	};
 
 	struct { /* anonymous struct used by BPF_OBJ_* commands */
@@ -507,7 +507,7 @@ struct bpf_prog_info {
 	__u32 created_by_uid;
 	__u32 nr_map_ids;
 	__aligned_u64 map_ids;
-	__u8  name[BPF_OBJ_NAME_LEN];
+	char name[BPF_OBJ_NAME_LEN];
 } __attribute__((aligned(8)));
 
 struct bpf_map_info {
@@ -517,7 +517,7 @@ struct bpf_map_info {
 	__u32 value_size;
 	__u32 max_entries;
 	__u32 map_flags;
-	__u8  name[BPF_OBJ_NAME_LEN];
+	char name[BPF_OBJ_NAME_LEN];
 } __attribute__((aligned(8)));
 
 #endif /* _UAPI__LINUX_BPF_H__ */
