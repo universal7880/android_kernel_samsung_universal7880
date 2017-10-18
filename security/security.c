@@ -1525,3 +1525,53 @@ int security_audit_rule_match(u32 secid, u32 field, u32 op, void *lsmrule,
 }
 
 #endif /* CONFIG_AUDIT */
+
+#ifdef CONFIG_BPF_SYSCALL
+
+int security_bpf(int cmd, union bpf_attr *attr, unsigned int size)
+{
+	if (security_ops->bpf)
+		return security_ops->bpf(cmd, attr, size);
+	return 0;
+}
+
+int security_bpf_map(struct bpf_map *map, fmode_t fmode)
+{
+	if (security_ops->bpf_map)
+		return security_ops->bpf_map(map, fmode);
+	return 0;
+}
+
+int security_bpf_prog(struct bpf_prog *prog)
+{
+	if (security_ops->bpf_prog)
+		return security_ops->bpf_prog(prog);
+	return 0;
+}
+
+int security_bpf_map_alloc(struct bpf_map *map)
+{
+	if (security_ops->bpf_map_alloc_security)
+		return security_ops->bpf_map_alloc_security(map);
+	return 0;
+}
+
+void security_bpf_map_free(struct bpf_map *map)
+{
+	if (security_ops->bpf_map_free_security)
+		security_ops->bpf_map_free_security(map);
+}
+
+int security_bpf_prog_alloc(struct bpf_prog_aux *aux)
+{
+	if (security_ops->bpf_prog_alloc_security)
+		return security_ops->bpf_prog_alloc_security(aux);
+	return 0;
+}
+
+void security_bpf_prog_free(struct bpf_prog_aux *aux)
+{
+	if (security_ops->bpf_prog_free_security)
+		security_ops->bpf_prog_free_security(aux);
+}
+#endif /* CONFIG_BPF_SYSCALL */
