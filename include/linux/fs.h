@@ -2901,5 +2901,6 @@ static inline bool dir_relax(struct inode *inode)
 /* for Android P */
 #define AID_USE_ROOT_RESERVED	KGIDT_INIT(5678)
 #endif
+extern void inode_nohighmem(struct inode *inode);
 
 #endif /* _LINUX_FS_H */
