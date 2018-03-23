@@ -67,6 +67,7 @@ struct dm_verity {
 #ifdef DMV_ALTA
 	u8 *verity_bitmap; /* bitmap for skipping verification on blocks */
 #endif
+	unsigned long *validated_blocks; /* bitset blocks validated */
 };
 
 struct dm_verity_io {
