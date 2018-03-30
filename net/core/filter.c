@@ -32,6 +32,8 @@
 #include <linux/netdevice.h>
 #include <linux/if_packet.h>
 #include <linux/gfp.h>
+#include <net/addrconf.h>
+#include <net/inet_common.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/netlink.h>
@@ -2121,7 +2123,7 @@ static const struct bpf_func_proto bpf_get_socket_uid_proto = {
 };
 
 static const struct bpf_func_proto *
-bpf_base_func_proto(enum bpf_func_id func_id)
+bpf_base_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
 	case BPF_FUNC_map_lookup_elem:
@@ -2146,7 +2148,7 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 }
 
 static const struct bpf_func_proto *
-sk_filter_func_proto(enum bpf_func_id func_id)
+sk_filter_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
 	case BPF_FUNC_get_socket_cookie:
@@ -2154,26 +2156,78 @@ sk_filter_func_proto(enum bpf_func_id func_id)
 	case BPF_FUNC_get_socket_uid:
 		return &bpf_get_socket_uid_proto;
 	default:
-		return bpf_base_func_proto(func_id);
+		return bpf_base_func_proto(func_id, prog);
 	}
 }
 
 static const struct bpf_func_proto *
-sock_filter_func_proto(enum bpf_func_id func_id)
+sock_filter_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
 	/* inet and inet6 sockets are created in a process
 	 * context so there is always a valid uid/gid
 	 */
 	case BPF_FUNC_get_current_uid_gid:
-	        return &bpf_get_current_uid_gid_proto;
+		return &bpf_get_current_uid_gid_proto;
 	default:
-	        return bpf_base_func_proto(func_id);
+		return bpf_base_func_proto(func_id, prog);
 	}
 }
 
+const struct ipv6_bpf_stub *ipv6_bpf_stub __read_mostly;
+EXPORT_SYMBOL_GPL(ipv6_bpf_stub);
+
+BPF_CALL_3(bpf_bind, struct bpf_sock_addr_kern *, ctx, struct sockaddr *, addr,
+	   int, addr_len)
+{
+#ifdef CONFIG_INET
+	struct sock *sk = ctx->sk;
+
+	if (addr_len < sizeof(addr->sa_family))
+		return -EINVAL;
+	/* Bind only the address; port allocation belongs to connect(). */
+	if (addr->sa_family == AF_INET) {
+		if (addr_len < sizeof(struct sockaddr_in) ||
+		    ((struct sockaddr_in *)addr)->sin_port)
+			return -EINVAL;
+		return __inet_bind(sk, addr, addr_len, true, false);
+#if IS_ENABLED(CONFIG_IPV6)
+	} else if (addr->sa_family == AF_INET6) {
+		if (addr_len < SIN6_LEN_RFC2133 ||
+		    ((struct sockaddr_in6 *)addr)->sin6_port)
+			return -EINVAL;
+		if (sk->sk_family != AF_INET6 || !ipv6_bpf_stub)
+			return -EAFNOSUPPORT;
+		return ipv6_bpf_stub->inet6_bind(sk, addr, addr_len, true, false);
+#endif
+	}
+#endif
+	return -EAFNOSUPPORT;
+}
+
+static const struct bpf_func_proto bpf_bind_proto = {
+	.func = bpf_bind,
+	.gpl_only = false,
+	.ret_type = RET_INTEGER,
+	.arg1_type = ARG_PTR_TO_CTX,
+	.arg2_type = ARG_PTR_TO_MEM,
+	.arg3_type = ARG_CONST_SIZE,
+};
+
 static const struct bpf_func_proto *
-tc_cls_act_func_proto(enum bpf_func_id func_id)
+sock_addr_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
+{
+	if (func_id == BPF_FUNC_bind) {
+		if (prog->expected_attach_type == BPF_CGROUP_INET4_CONNECT ||
+		    prog->expected_attach_type == BPF_CGROUP_INET6_CONNECT)
+			return &bpf_bind_proto;
+		return NULL;
+	}
+	return sock_filter_func_proto(func_id, prog);
+}
+
+static const struct bpf_func_proto *
+tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
 	case BPF_FUNC_skb_store_bytes:
@@ -2219,18 +2273,18 @@ tc_cls_act_func_proto(enum bpf_func_id func_id)
 		return &bpf_skb_under_cgroup_proto;
 #endif
 	default:
-		return sk_filter_func_proto(func_id);
+		return sk_filter_func_proto(func_id, prog);
 	}
 }
 
 static const struct bpf_func_proto *
-cg_skb_func_proto(enum bpf_func_id func_id)
+cg_skb_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
 	case BPF_FUNC_skb_load_bytes:
 		return &bpf_skb_load_bytes_proto;
 	default:
-		return sk_filter_func_proto(func_id);
+		return sk_filter_func_proto(func_id, prog);
 	}
 }
 
@@ -2382,10 +2436,12 @@ static bool sock_addr_is_valid_access(int off, int size,
 
 	switch (off) {
 	case offsetof(struct bpf_sock_addr, user_ip4):
-		return prog->expected_attach_type == BPF_CGROUP_INET4_BIND;
+		return prog->expected_attach_type == BPF_CGROUP_INET4_BIND ||
+		       prog->expected_attach_type == BPF_CGROUP_INET4_CONNECT;
 	case offsetof(struct bpf_sock_addr, user_ip6[0]) ...
 	     offsetof(struct bpf_sock_addr, user_ip6[3]):
-		return prog->expected_attach_type == BPF_CGROUP_INET6_BIND;
+		return prog->expected_attach_type == BPF_CGROUP_INET6_BIND ||
+		       prog->expected_attach_type == BPF_CGROUP_INET6_CONNECT;
 	case offsetof(struct bpf_sock_addr, user_port):
 		return true;
 	default:
@@ -2726,7 +2782,7 @@ static const struct bpf_verifier_ops cg_sock_ops = {
 };
 
 static const struct bpf_verifier_ops cg_sock_addr_verifier_ops = {
-	.get_func_proto = sock_filter_func_proto,
+	.get_func_proto = sock_addr_func_proto,
 	.is_valid_access = sock_addr_is_valid_access,
 	.convert_ctx_access = sock_addr_convert_ctx_access,
 };
