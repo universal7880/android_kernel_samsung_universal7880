@@ -2249,7 +2249,8 @@ static bool __is_valid_access(int off, int size, enum bpf_access_type type)
 
 static bool sk_filter_is_valid_access(int off, int size,
 				      enum bpf_access_type type,
-				      enum bpf_reg_type *reg_type)
+				      enum bpf_reg_type *reg_type,
+				      const struct bpf_prog *prog)
 {
 	switch (off) {
 	case offsetof(struct __sk_buff, tc_classid):
@@ -2273,7 +2274,8 @@ static bool sk_filter_is_valid_access(int off, int size,
 
 static bool sock_filter_is_valid_access(int off, int size,
 					enum bpf_access_type type,
-					enum bpf_reg_type *reg_type)
+					enum bpf_reg_type *reg_type,
+				      const struct bpf_prog *prog)
 {
 	/* This context converter supports complete 32-bit fields. */
 	if (size != sizeof(__u32))
@@ -2339,7 +2341,8 @@ static int tc_cls_act_prologue(struct bpf_insn *insn_buf, bool direct_write,
 
 static bool tc_cls_act_is_valid_access(int off, int size,
 				       enum bpf_access_type type,
-				       enum bpf_reg_type *reg_type)
+				       enum bpf_reg_type *reg_type,
+				      const struct bpf_prog *prog)
 {
 	if (type == BPF_WRITE) {
 		switch (off) {
@@ -2365,6 +2368,29 @@ static bool tc_cls_act_is_valid_access(int off, int size,
 	}
 
 	return __is_valid_access(off, size, type);
+}
+
+static bool sock_addr_is_valid_access(int off, int size,
+				      enum bpf_access_type type,
+				      enum bpf_reg_type *reg_type,
+				      const struct bpf_prog *prog)
+{
+	/* Narrow accesses need verifier rewrite support not present here. */
+	if (size != sizeof(__u32) || off < 0 ||
+	    off >= sizeof(struct bpf_sock_addr) || off % size)
+		return false;
+
+	switch (off) {
+	case offsetof(struct bpf_sock_addr, user_ip4):
+		return prog->expected_attach_type == BPF_CGROUP_INET4_BIND;
+	case offsetof(struct bpf_sock_addr, user_ip6[0]) ...
+	     offsetof(struct bpf_sock_addr, user_ip6[3]):
+		return prog->expected_attach_type == BPF_CGROUP_INET6_BIND;
+	case offsetof(struct bpf_sock_addr, user_port):
+		return true;
+	default:
+		return type == BPF_READ;
+	}
 }
 
 static u32 sk_filter_convert_ctx_access(enum bpf_access_type type, int dst_reg,
@@ -2599,6 +2625,81 @@ static u32 tc_cls_act_convert_ctx_access(enum bpf_access_type type, int dst_reg,
 	return insn - insn_buf;
 }
 
+static u32 sock_addr_convert_ctx_access(enum bpf_access_type type,
+				       int dst_reg, int src_reg, int ctx_off,
+				       struct bpf_insn *insn_buf,
+				       struct bpf_prog *prog)
+{
+	struct bpf_insn *insn = insn_buf;
+	int field_off, field_size;
+
+	switch (ctx_off) {
+	case offsetof(struct bpf_sock_addr, user_family):
+		field_off = offsetof(struct sockaddr, sa_family);
+		field_size = BPF_FIELD_SIZEOF(struct sockaddr, sa_family);
+		break;
+	case offsetof(struct bpf_sock_addr, user_ip4):
+		field_off = offsetof(struct sockaddr_in, sin_addr);
+		field_size = BPF_W;
+		break;
+	case offsetof(struct bpf_sock_addr, user_ip6[0]) ...
+	     offsetof(struct bpf_sock_addr, user_ip6[3]):
+		field_off = offsetof(struct sockaddr_in6, sin6_addr) + ctx_off -
+			    offsetof(struct bpf_sock_addr, user_ip6[0]);
+		field_size = BPF_W;
+		break;
+	case offsetof(struct bpf_sock_addr, user_port):
+		BUILD_BUG_ON(offsetof(struct sockaddr_in, sin_port) !=
+			     offsetof(struct sockaddr_in6, sin6_port));
+		BUILD_BUG_ON(FIELD_SIZEOF(struct sockaddr_in, sin_port) !=
+			     FIELD_SIZEOF(struct sockaddr_in6, sin6_port));
+		field_off = offsetof(struct sockaddr_in, sin_port);
+		field_size = BPF_FIELD_SIZEOF(struct sockaddr_in, sin_port);
+		break;
+	case offsetof(struct bpf_sock_addr, family):
+		*insn++ = BPF_LDX_MEM(BPF_SIZEOF(void *), dst_reg, src_reg,
+				      offsetof(struct bpf_sock_addr_kern, sk));
+		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct sock, sk_family),
+				      dst_reg, dst_reg, offsetof(struct sock, sk_family));
+		return insn - insn_buf;
+	case offsetof(struct bpf_sock_addr, type):
+	case offsetof(struct bpf_sock_addr, protocol):
+		*insn++ = BPF_LDX_MEM(BPF_SIZEOF(void *), dst_reg, src_reg,
+				      offsetof(struct bpf_sock_addr_kern, sk));
+		*insn++ = BPF_LDX_MEM(BPF_W, dst_reg, dst_reg,
+				      offsetof(struct sock, __sk_flags_offset));
+		if (ctx_off == offsetof(struct bpf_sock_addr, type)) {
+			*insn++ = BPF_ALU32_IMM(BPF_AND, dst_reg, SK_FL_TYPE_MASK);
+			*insn++ = BPF_ALU32_IMM(BPF_RSH, dst_reg, SK_FL_TYPE_SHIFT);
+		} else {
+			*insn++ = BPF_ALU32_IMM(BPF_AND, dst_reg, SK_FL_PROTO_MASK);
+			*insn++ = BPF_ALU32_IMM(BPF_RSH, dst_reg, SK_FL_PROTO_SHIFT);
+		}
+		return insn - insn_buf;
+	default:
+		return 0;
+	}
+
+	if (type == BPF_WRITE) {
+		int tmp_reg = BPF_REG_9;
+
+		while (tmp_reg == src_reg || tmp_reg == dst_reg)
+			--tmp_reg;
+		*insn++ = BPF_STX_MEM(BPF_DW, dst_reg, tmp_reg,
+				      offsetof(struct bpf_sock_addr_kern, tmp_reg));
+		*insn++ = BPF_LDX_MEM(BPF_SIZEOF(void *), tmp_reg, dst_reg,
+				      offsetof(struct bpf_sock_addr_kern, uaddr));
+		*insn++ = BPF_STX_MEM(field_size, tmp_reg, src_reg, field_off);
+		*insn++ = BPF_LDX_MEM(BPF_DW, tmp_reg, dst_reg,
+				      offsetof(struct bpf_sock_addr_kern, tmp_reg));
+	} else {
+		*insn++ = BPF_LDX_MEM(BPF_SIZEOF(void *), dst_reg, src_reg,
+				      offsetof(struct bpf_sock_addr_kern, uaddr));
+		*insn++ = BPF_LDX_MEM(field_size, dst_reg, dst_reg, field_off);
+	}
+	return insn - insn_buf;
+}
+
 static const struct bpf_verifier_ops sk_filter_ops = {
 	.get_func_proto		= sk_filter_func_proto,
 	.is_valid_access	= sk_filter_is_valid_access,
@@ -2622,6 +2723,12 @@ static const struct bpf_verifier_ops cg_sock_ops = {
 	.get_func_proto		= sock_filter_func_proto,
 	.is_valid_access	= sock_filter_is_valid_access,
 	.convert_ctx_access	= sock_filter_convert_ctx_access,
+};
+
+static const struct bpf_verifier_ops cg_sock_addr_verifier_ops = {
+	.get_func_proto = sock_filter_func_proto,
+	.is_valid_access = sock_addr_is_valid_access,
+	.convert_ctx_access = sock_addr_convert_ctx_access,
 };
 
 static struct bpf_prog_type_list sk_filter_type __read_mostly = {
@@ -2649,6 +2756,11 @@ static struct bpf_prog_type_list cg_sock_type __read_mostly = {
 	.type	= BPF_PROG_TYPE_CGROUP_SOCK
 };
 
+static struct bpf_prog_type_list cg_sock_addr_type __read_mostly = {
+	.ops = &cg_sock_addr_verifier_ops,
+	.type = BPF_PROG_TYPE_CGROUP_SOCK_ADDR,
+};
+
 static int __init register_sk_filter_ops(void)
 {
 	bpf_register_prog_type(&sk_filter_type);
@@ -2656,6 +2768,7 @@ static int __init register_sk_filter_ops(void)
 	bpf_register_prog_type(&sched_act_type);
 	bpf_register_prog_type(&cg_skb_type);
 	bpf_register_prog_type(&cg_sock_type);
+	bpf_register_prog_type(&cg_sock_addr_type);
 
 	return 0;
 }

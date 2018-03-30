@@ -389,6 +389,7 @@ struct bpf_prog {
 	u32			len;		/* Number of filter blocks */
 	u32			jited_len;	/* Number of JIT image bytes */
 	enum bpf_prog_type	type;		/* Type of BPF program */
+	enum bpf_attach_type	expected_attach_type; /* For some prog types */
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
 	unsigned int		(*bpf_func)(const void *ctx,
@@ -666,5 +667,15 @@ static inline int bpf_tell_extensions(void)
 {
 	return SKF_AD_MAX;
 }
+
+struct bpf_sock_addr_kern {
+	struct sock *sk;
+	struct sockaddr *uaddr;
+	/* Temporary "register" to make indirect stores to nested structures
+	 * defined above. We need three registers to make such a store, but
+	 * only two (src and dst) are available at convert_ctx_access time
+	 */
+	u64 tmp_reg;
+};
 
 #endif /* __LINUX_FILTER_H__ */

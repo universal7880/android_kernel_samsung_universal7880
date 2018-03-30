@@ -952,7 +952,7 @@ struct bpf_prog *bpf_prog_get_type(u32 ufd, enum bpf_prog_type type)
 EXPORT_SYMBOL_GPL(bpf_prog_get_type);
 
 /* last field in 'union bpf_attr' used by this command */
-#define	BPF_PROG_LOAD_LAST_FIELD prog_name
+#define	BPF_PROG_LOAD_LAST_FIELD expected_attach_type
 
 static int bpf_prog_load(union bpf_attr *attr)
 {
@@ -965,8 +965,17 @@ static int bpf_prog_load(union bpf_attr *attr)
 	if (CHECK_ATTR(BPF_PROG_LOAD))
 		return -EINVAL;
 
-	if (attr->prog_flags & ~BPF_F_STRICT_ALIGNMENT)
+	if (attr->prog_ifindex ||
+	    attr->prog_flags & ~BPF_F_STRICT_ALIGNMENT)
 		return -EINVAL;
+
+	if (type == BPF_PROG_TYPE_CGROUP_SOCK_ADDR) {
+		if (attr->expected_attach_type != BPF_CGROUP_INET4_BIND &&
+		    attr->expected_attach_type != BPF_CGROUP_INET6_BIND)
+			return -EINVAL;
+	} else if (attr->expected_attach_type) {
+		return -EINVAL;
+	}
 
 	/* copy eBPF program license from user space */
 	if (strncpy_from_user(license, u64_to_ptr(attr->license),
@@ -1001,6 +1010,7 @@ static int bpf_prog_load(union bpf_attr *attr)
 		goto free_prog_sec;
 
 	prog->len = attr->insn_cnt;
+	prog->expected_attach_type = attr->expected_attach_type;
 
 	err = -EFAULT;
 	if (copy_from_user(prog->insns, u64_to_ptr(attr->insns),
@@ -1389,6 +1399,28 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 		cgroup_put(cgrp);
 		break;
 
+	case BPF_CGROUP_INET4_BIND:
+	case BPF_CGROUP_INET6_BIND:
+		prog = bpf_prog_get_type(attr->attach_bpf_fd,
+					 BPF_PROG_TYPE_CGROUP_SOCK_ADDR);
+		if (IS_ERR(prog))
+			return PTR_ERR(prog);
+		if (prog->expected_attach_type != attr->attach_type) {
+			bpf_prog_put(prog);
+			return -EINVAL;
+		}
+		cgrp = cgroup_get_from_fd(attr->target_fd);
+		if (IS_ERR(cgrp)) {
+			bpf_prog_put(prog);
+			return PTR_ERR(cgrp);
+		}
+		ret = cgroup_bpf_attach(cgrp, prog, attr->attach_type,
+					attr->attach_flags);
+		if (ret)
+			bpf_prog_put(prog);
+		cgroup_put(cgrp);
+		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -1419,6 +1451,11 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 
 	case BPF_CGROUP_INET_SOCK_CREATE:
 		ptype = BPF_PROG_TYPE_CGROUP_SOCK;
+		break;
+
+	case BPF_CGROUP_INET4_BIND:
+	case BPF_CGROUP_INET6_BIND:
+		ptype = BPF_PROG_TYPE_CGROUP_SOCK_ADDR;
 		break;
 
 	default:
@@ -1458,6 +1495,8 @@ static int bpf_prog_query(const union bpf_attr *attr,
 	case BPF_CGROUP_INET_INGRESS:
 	case BPF_CGROUP_INET_EGRESS:
 	case BPF_CGROUP_INET_SOCK_CREATE:
+	case BPF_CGROUP_INET4_BIND:
+	case BPF_CGROUP_INET6_BIND:
 		break;
 	default:
 		return -EINVAL;
