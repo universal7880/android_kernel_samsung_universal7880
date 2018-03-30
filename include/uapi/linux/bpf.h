@@ -131,6 +131,8 @@ enum bpf_attach_type {
 	BPF_CGROUP_INET_SOCK_CREATE,
 	BPF_CGROUP_INET4_BIND = 8,
 	BPF_CGROUP_INET6_BIND = 9,
+	BPF_CGROUP_INET4_CONNECT,
+	BPF_CGROUP_INET6_CONNECT,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -550,6 +552,7 @@ enum bpf_func_id {
 	 */
 	BPF_FUNC_get_socket_uid,
 
+	BPF_FUNC_bind = 64,
 	__BPF_FUNC_MAX_ID,
 };
 

@@ -1301,7 +1301,7 @@ static int check_call(struct bpf_verifier_env *env, int func_id, int insn_idx)
 	}
 
 	if (env->prog->aux->ops->get_func_proto)
-		fn = env->prog->aux->ops->get_func_proto(func_id);
+		fn = env->prog->aux->ops->get_func_proto(func_id, env->prog);
 
 	if (!fn) {
 		verbose("unknown func %d\n", func_id);
@@ -3519,7 +3519,7 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
 			continue;
 		}
 
-		fn = prog->aux->ops->get_func_proto(insn->imm);
+		fn = prog->aux->ops->get_func_proto(insn->imm, prog);
 		/* all functions that have prototype and verifier allowed
 		 * programs to call them, must be real in-kernel functions
 		 */
