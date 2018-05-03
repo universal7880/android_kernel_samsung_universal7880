@@ -558,6 +558,7 @@ enum bpf_func_id {
 	BPF_FUNC_get_socket_uid,
 
 	BPF_FUNC_bind = 64,
+	BPF_FUNC_skb_load_bytes_relative = 68,
 	__BPF_FUNC_MAX_ID,
 };
 
@@ -593,6 +594,12 @@ enum bpf_func_id {
 #define BPF_F_CURRENT_CPU		BPF_F_INDEX_MASK
 /* BPF_FUNC_perf_event_output for sk_buff input context. */
 #define BPF_F_CTXLEN_MASK		(0xfffffULL << 32)
+
+/* Mode for BPF_FUNC_skb_load_bytes_relative. */
+enum bpf_hdr_start_off {
+	BPF_HDR_START_MAC,
+	BPF_HDR_START_NET,
+};
 
 /* user accessible mirror of in-kernel sk_buff.
  * new fields can only be added to the end of this structure
