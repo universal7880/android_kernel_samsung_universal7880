@@ -1324,6 +1324,51 @@ static const struct bpf_func_proto bpf_skb_load_bytes_proto = {
 	.arg4_type	= ARG_CONST_SIZE,
 };
 
+BPF_CALL_5(bpf_skb_load_bytes_relative, const struct sk_buff *, skb,
+	   u32, offset, void *, to, u32, len, u32, start_header)
+{
+	u32 end = skb_tail_pointer(skb) - skb->head;
+	u32 start;
+
+	if (unlikely(offset > 0xffff))
+		goto err_clear;
+
+	switch (start_header) {
+	case BPF_HDR_START_MAC:
+		if (!skb_mac_header_was_set(skb))
+			goto err_clear;
+		start = skb->mac_header;
+		break;
+	case BPF_HDR_START_NET:
+		start = skb->network_header;
+		break;
+	default:
+		goto err_clear;
+	}
+
+	/* Check integer offsets before forming the packet pointer. */
+	if (unlikely(start > end || offset > end - start ||
+		     len > end - start - offset))
+		goto err_clear;
+	memcpy(to, skb->head + start + offset, len);
+	return 0;
+
+err_clear:
+	memset(to, 0, len);
+	return -EFAULT;
+}
+
+static const struct bpf_func_proto bpf_skb_load_bytes_relative_proto = {
+	.func		= bpf_skb_load_bytes_relative,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_CTX,
+	.arg2_type	= ARG_ANYTHING,
+	.arg3_type	= ARG_PTR_TO_UNINIT_MEM,
+	.arg4_type	= ARG_CONST_SIZE,
+	.arg5_type	= ARG_ANYTHING,
+};
+
 BPF_CALL_2(bpf_skb_pull_data, struct sk_buff *, skb, u32, len)
 {
 	/* Idea is the following: should the needed direct read/write
@@ -2151,6 +2196,8 @@ static const struct bpf_func_proto *
 sk_filter_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
+	case BPF_FUNC_skb_load_bytes_relative:
+		return &bpf_skb_load_bytes_relative_proto;
 	case BPF_FUNC_get_socket_cookie:
 		return &bpf_get_socket_cookie_proto;
 	case BPF_FUNC_get_socket_uid:
@@ -2234,6 +2281,8 @@ tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_skb_store_bytes_proto;
 	case BPF_FUNC_skb_load_bytes:
 		return &bpf_skb_load_bytes_proto;
+	case BPF_FUNC_skb_load_bytes_relative:
+		return &bpf_skb_load_bytes_relative_proto;
 	case BPF_FUNC_skb_pull_data:
 		return &bpf_skb_pull_data_proto;
 	case BPF_FUNC_csum_diff:
