@@ -869,6 +869,7 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 {
 	struct inet_sock *inet = inet_sk(sk);
 	struct udp_sock *up = udp_sk(sk);
+	struct sockaddr_in *usin = (struct sockaddr_in *)msg->msg_name;
 	struct flowi4 fl4_stack;
 	struct flowi4 *fl4;
 	int ulen = len;
@@ -923,8 +924,7 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	/*
 	 *	Get and verify the address.
 	 */
-	if (msg->msg_name) {
-		DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
+	if (usin) {
 		if (msg->msg_namelen < sizeof(*usin))
 			return -EINVAL;
 		if (usin->sin_family != AF_INET) {
@@ -974,6 +974,22 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 			ipc.opt = &opt_copy.opt;
 		}
 		rcu_read_unlock();
+	}
+
+	if (cgroup_bpf_enabled && !connected) {
+		err = BPF_CGROUP_RUN_PROG_UDP4_SENDMSG_LOCK(sk,
+					    (struct sockaddr *)usin, &ipc.addr);
+		if (err)
+			goto out_free;
+		if (usin) {
+			if (usin->sin_port == 0) {
+				/* BPF program set invalid port. Reject it. */
+				err = -EINVAL;
+				goto out_free;
+			}
+			daddr = usin->sin_addr.s_addr;
+			dport = usin->sin_port;
+		}
 	}
 
 	saddr = ipc.addr;

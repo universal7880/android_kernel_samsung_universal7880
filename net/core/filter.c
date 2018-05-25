@@ -2486,11 +2486,18 @@ static bool sock_addr_is_valid_access(int off, int size,
 	switch (off) {
 	case offsetof(struct bpf_sock_addr, user_ip4):
 		return prog->expected_attach_type == BPF_CGROUP_INET4_BIND ||
-		       prog->expected_attach_type == BPF_CGROUP_INET4_CONNECT;
+		       prog->expected_attach_type == BPF_CGROUP_INET4_CONNECT ||
+		       prog->expected_attach_type == BPF_CGROUP_UDP4_SENDMSG;
 	case offsetof(struct bpf_sock_addr, user_ip6[0]) ...
 	     offsetof(struct bpf_sock_addr, user_ip6[3]):
 		return prog->expected_attach_type == BPF_CGROUP_INET6_BIND ||
-		       prog->expected_attach_type == BPF_CGROUP_INET6_CONNECT;
+		       prog->expected_attach_type == BPF_CGROUP_INET6_CONNECT ||
+		       prog->expected_attach_type == BPF_CGROUP_UDP6_SENDMSG;
+	case offsetof(struct bpf_sock_addr, msg_src_ip4):
+		return prog->expected_attach_type == BPF_CGROUP_UDP4_SENDMSG;
+	case offsetof(struct bpf_sock_addr, msg_src_ip6[0]) ...
+	     offsetof(struct bpf_sock_addr, msg_src_ip6[3]):
+		return prog->expected_attach_type == BPF_CGROUP_UDP6_SENDMSG;
 	case offsetof(struct bpf_sock_addr, user_port):
 		return true;
 	default:
@@ -2737,6 +2744,7 @@ static u32 sock_addr_convert_ctx_access(enum bpf_access_type type,
 {
 	struct bpf_insn *insn = insn_buf;
 	int field_off, field_size;
+	int base_off = offsetof(struct bpf_sock_addr_kern, uaddr);
 
 	switch (ctx_off) {
 	case offsetof(struct bpf_sock_addr, user_family):
@@ -2751,6 +2759,17 @@ static u32 sock_addr_convert_ctx_access(enum bpf_access_type type,
 	     offsetof(struct bpf_sock_addr, user_ip6[3]):
 		field_off = offsetof(struct sockaddr_in6, sin6_addr) + ctx_off -
 			    offsetof(struct bpf_sock_addr, user_ip6[0]);
+		field_size = BPF_W;
+		break;
+	case offsetof(struct bpf_sock_addr, msg_src_ip4):
+		base_off = offsetof(struct bpf_sock_addr_kern, t_ctx);
+		field_off = 0;
+		field_size = BPF_W;
+		break;
+	case offsetof(struct bpf_sock_addr, msg_src_ip6[0]) ...
+	     offsetof(struct bpf_sock_addr, msg_src_ip6[3]):
+		base_off = offsetof(struct bpf_sock_addr_kern, t_ctx);
+		field_off = ctx_off - offsetof(struct bpf_sock_addr, msg_src_ip6[0]);
 		field_size = BPF_W;
 		break;
 	case offsetof(struct bpf_sock_addr, user_port):
@@ -2793,13 +2812,13 @@ static u32 sock_addr_convert_ctx_access(enum bpf_access_type type,
 		*insn++ = BPF_STX_MEM(BPF_DW, dst_reg, tmp_reg,
 				      offsetof(struct bpf_sock_addr_kern, tmp_reg));
 		*insn++ = BPF_LDX_MEM(BPF_SIZEOF(void *), tmp_reg, dst_reg,
-				      offsetof(struct bpf_sock_addr_kern, uaddr));
+				      base_off);
 		*insn++ = BPF_STX_MEM(field_size, tmp_reg, src_reg, field_off);
 		*insn++ = BPF_LDX_MEM(BPF_DW, tmp_reg, dst_reg,
 				      offsetof(struct bpf_sock_addr_kern, tmp_reg));
 	} else {
 		*insn++ = BPF_LDX_MEM(BPF_SIZEOF(void *), dst_reg, src_reg,
-				      offsetof(struct bpf_sock_addr_kern, uaddr));
+				      base_off);
 		*insn++ = BPF_LDX_MEM(field_size, dst_reg, dst_reg, field_off);
 	}
 	return insn - insn_buf;

@@ -140,7 +140,9 @@ enum bpf_attach_type {
 	BPF_CGROUP_INET6_BIND = 9,
 	BPF_CGROUP_INET4_CONNECT,
 	BPF_CGROUP_INET6_CONNECT,
-	__MAX_BPF_ATTACH_TYPE
+	BPF_CGROUP_UDP4_SENDMSG = 14,
+	BPF_CGROUP_UDP6_SENDMSG,
+	__MAX_BPF_ATTACH_TYPE,
 };
 
 #define MAX_BPF_ATTACH_TYPE __MAX_BPF_ATTACH_TYPE
@@ -685,6 +687,12 @@ struct bpf_sock_addr {
 	__u32 family;		/* Allows 4-byte read, but no write */
 	__u32 type;		/* Allows 4-byte read, but no write */
 	__u32 protocol;		/* Allows 4-byte read, but no write */
+	__u32 msg_src_ip4;	/* Allows 4-byte read and write.
+				 * Stored in network byte order.
+				 */
+	__u32 msg_src_ip6[4];	/* Allows 4-byte read and write.
+				 * Stored in network byte order.
+				 */
 };
 
 #endif /* _UAPI__LINUX_BPF_H__ */
