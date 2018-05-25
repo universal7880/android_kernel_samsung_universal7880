@@ -1006,7 +1006,9 @@ static int bpf_prog_load(union bpf_attr *attr)
 		if (attr->expected_attach_type != BPF_CGROUP_INET4_BIND &&
 		    attr->expected_attach_type != BPF_CGROUP_INET6_BIND &&
 		    attr->expected_attach_type != BPF_CGROUP_INET4_CONNECT &&
-		    attr->expected_attach_type != BPF_CGROUP_INET6_CONNECT)
+		    attr->expected_attach_type != BPF_CGROUP_INET6_CONNECT &&
+		    attr->expected_attach_type != BPF_CGROUP_UDP4_SENDMSG &&
+		    attr->expected_attach_type != BPF_CGROUP_UDP6_SENDMSG)
 			return -EINVAL;
 	} else if (attr->expected_attach_type) {
 		return -EINVAL;
@@ -1439,6 +1441,8 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 	case BPF_CGROUP_INET6_BIND:
 	case BPF_CGROUP_INET4_CONNECT:
 	case BPF_CGROUP_INET6_CONNECT:
+	case BPF_CGROUP_UDP4_SENDMSG:
+	case BPF_CGROUP_UDP6_SENDMSG:
 		prog = bpf_prog_get_type(attr->attach_bpf_fd,
 					 BPF_PROG_TYPE_CGROUP_SOCK_ADDR);
 		if (IS_ERR(prog))
@@ -1495,6 +1499,8 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 	case BPF_CGROUP_INET6_BIND:
 	case BPF_CGROUP_INET4_CONNECT:
 	case BPF_CGROUP_INET6_CONNECT:
+	case BPF_CGROUP_UDP4_SENDMSG:
+	case BPF_CGROUP_UDP6_SENDMSG:
 		ptype = BPF_PROG_TYPE_CGROUP_SOCK_ADDR;
 		break;
 
@@ -1539,6 +1545,8 @@ static int bpf_prog_query(const union bpf_attr *attr,
 	case BPF_CGROUP_INET6_BIND:
 	case BPF_CGROUP_INET4_CONNECT:
 	case BPF_CGROUP_INET6_CONNECT:
+	case BPF_CGROUP_UDP4_SENDMSG:
+	case BPF_CGROUP_UDP6_SENDMSG:
 		break;
 	default:
 		return -EINVAL;
