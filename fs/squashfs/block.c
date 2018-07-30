@@ -156,6 +156,10 @@ static void squashfs_process_blocks(struct squashfs_read_request *req)
 		squashfs_bh_to_actor(bh, nr_buffers, req->output, req->offset,
 			req->length, msblk->devblksize);
 	} else if (req->data_processing == SQUASHFS_DECOMPRESS) {
+		if (!msblk->stream) {
+			error = -EIO;
+			goto cleanup;
+		}
 		req->length = squashfs_decompress(msblk, bh, nr_buffers,
 			req->offset, req->length, actor);
 		if (req->length < 0) {
