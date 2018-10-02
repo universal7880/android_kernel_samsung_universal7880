@@ -2402,6 +2402,14 @@ static bool sk_filter_is_valid_access(int off, int size,
 	return __is_valid_access(off, size, type);
 }
 
+bool bpf_sock_is_valid_access(int off, int size, enum bpf_access_type type)
+{
+	/* Only complete scalar fields have a converter in this backport. */
+	return type == BPF_READ && size == sizeof(__u32) &&
+	       off >= 0 && off <= sizeof(struct bpf_sock) - size &&
+	       off % size == 0;
+}
+
 static bool sock_filter_is_valid_access(int off, int size,
 					enum bpf_access_type type,
 					enum bpf_reg_type *reg_type,
@@ -2739,6 +2747,14 @@ static u32 sock_filter_convert_ctx_access(enum bpf_access_type type,
 	}
 
 	return insn - insn_buf;
+}
+
+u32 bpf_sock_convert_ctx_access(enum bpf_access_type type, int dst_reg,
+			       int src_reg, int ctx_off,
+			       struct bpf_insn *insn_buf, struct bpf_prog *prog)
+{
+	return sock_filter_convert_ctx_access(type, dst_reg, src_reg,
+					     ctx_off, insn_buf, prog);
 }
 
 static u32 tc_cls_act_convert_ctx_access(enum bpf_access_type type, int dst_reg,
