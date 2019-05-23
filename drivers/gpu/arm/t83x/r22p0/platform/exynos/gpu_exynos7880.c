@@ -331,9 +331,13 @@ static int gpu_get_clock(struct kbase_device *kbdev)
 
 static int gpu_enable_clock(struct exynos_context *platform)
 {
+	int err = 0;
 	GPU_LOG(DVFS_DEBUG, DUMMY, 0u, 0u, "%s: [vclk_g3d]\n", __func__);
-	clk_prepare_enable(vclk_g3d);
-	return 0;
+	err = clk_prepare_enable(vclk_g3d);
+	if (err) {
+		GPU_LOG(DVFS_ERROR, LSI_CLOCK_ON_ERR, 0u, 0u, "%s: failed to clk_enable [vclk_g3d]\n", __func__);
+	}
+	return err;
 }
 
 static int gpu_disable_clock(struct exynos_context *platform)
@@ -482,8 +486,13 @@ int gpu_enable_dvs(struct exynos_context *platform)
 
 #ifdef CONFIG_EXYNOS_CL_DVFS_G3D
 	if (!platform->dvs_is_enabled) {
-		level = gpu_dvfs_get_level(gpu_get_cur_clock(platform));
-		exynos_cl_dvfs_stop(ID_G3D, level);
+		if (platform->exynos_pm_domain) {
+		mutex_lock(&platform->exynos_pm_domain->access_lock);
+		if (!platform->dvs_is_enabled && gpu_is_power_on()) {
+			level = gpu_dvfs_get_level(gpu_get_cur_clock(platform));
+			exynos_cl_dvfs_stop(ID_G3D, level);
+		}
+		mutex_unlock(&platform->exynos_pm_domain->access_lock);
 	}
 #endif /* CONFIG_EXYNOS_CL_DVFS_G3D */
 
