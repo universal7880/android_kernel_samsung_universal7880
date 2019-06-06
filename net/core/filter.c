@@ -2487,12 +2487,14 @@ static bool sock_addr_is_valid_access(int off, int size,
 	case offsetof(struct bpf_sock_addr, user_ip4):
 		return prog->expected_attach_type == BPF_CGROUP_INET4_BIND ||
 		       prog->expected_attach_type == BPF_CGROUP_INET4_CONNECT ||
-		       prog->expected_attach_type == BPF_CGROUP_UDP4_SENDMSG;
+		       prog->expected_attach_type == BPF_CGROUP_UDP4_SENDMSG ||
+		       prog->expected_attach_type == BPF_CGROUP_UDP4_RECVMSG;
 	case offsetof(struct bpf_sock_addr, user_ip6[0]) ...
 	     offsetof(struct bpf_sock_addr, user_ip6[3]):
 		return prog->expected_attach_type == BPF_CGROUP_INET6_BIND ||
 		       prog->expected_attach_type == BPF_CGROUP_INET6_CONNECT ||
-		       prog->expected_attach_type == BPF_CGROUP_UDP6_SENDMSG;
+		       prog->expected_attach_type == BPF_CGROUP_UDP6_SENDMSG ||
+		       prog->expected_attach_type == BPF_CGROUP_UDP6_RECVMSG;
 	case offsetof(struct bpf_sock_addr, msg_src_ip4):
 		return prog->expected_attach_type == BPF_CGROUP_UDP4_SENDMSG;
 	case offsetof(struct bpf_sock_addr, msg_src_ip6[0]) ...
