@@ -3196,8 +3196,13 @@ int f2fs_inplace_write_data(struct f2fs_io_info *fio)
 	/* i/o temperature is needed for passing down write hints */
 	__get_segment_type(fio);
 
-	f2fs_bug_on(sbi, !IS_DATASEG(get_seg_entry(sbi,
-			GET_SEGNO(sbi, fio->new_blkaddr))->type));
+	if (!IS_DATASEG(get_seg_entry(sbi,
+			GET_SEGNO(sbi, fio->new_blkaddr))->type)) {
+		f2fs_msg(sbi->sb, KERN_WARNING,
+			"%s: incorrect segment(%u) type, run fsck to fix.",
+			__func__, GET_SEGNO(sbi, fio->new_blkaddr));
+		f2fs_bug_on(sbi, 1);
+	}
 
 	stat_inc_inplace_blocks(fio->sbi);
 	atomic64_inc(&(sbi->sec_stat.inplace_count));
