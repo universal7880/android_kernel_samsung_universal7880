@@ -816,7 +816,7 @@ int f2fs_fill_dentries(struct dir_context *ctx, struct f2fs_dentry_ptr *d,
 				"%s: corrupted namelen=%d, run fsck to fix.",
 				__func__, le16_to_cpu(de->name_len));
 			set_sbi_flag(sbi, SBI_NEED_FSCK);
-			err = -EINVAL;
+			err = -EFSCORRUPTED;
 			goto out;
 		}
 
@@ -915,7 +915,7 @@ static int f2fs_readdir(struct file *file, struct dir_context *ctx)
 		if (err) {
 			struct f2fs_sb_info *sbi = F2FS_P_SB(dentry_page);
 
-			if (err == -EINVAL) {
+			if (err == -EFSCORRUPTED) {
 				print_block_data(sbi->sb, n,
 					page_address(dentry_page), 0, F2FS_BLKSIZE);
 				f2fs_bug_on(sbi, 1);
