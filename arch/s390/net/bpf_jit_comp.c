@@ -27,8 +27,6 @@
  *   %r13 = literal pool pointer
  *   0(%r15) - 63(%r15) scratch memory array with BPF_MEMWORDS
  */
-int bpf_jit_enable __read_mostly;
-
 /*
  * assembly code in arch/x86/net/bpf_jit.S
  */

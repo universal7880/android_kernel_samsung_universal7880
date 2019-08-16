@@ -71,8 +71,6 @@ struct jit_ctx {
 #endif
 };
 
-int bpf_jit_enable __read_mostly;
-
 static u64 jit_get_skb_b(struct sk_buff *skb, unsigned offset)
 {
 	u8 ret;
