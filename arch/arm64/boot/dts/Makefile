@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-dtb-$(CONFIG_CONFIG_CAMERA_A5Y17) := \
+dtb-$(CONFIG_CONFIG_CAMERA_A5Y17) += \
 	exynos7880-a5y17lte_eur_open_00.dtb \
 	exynos7880-a5y17lte_eur_open_01.dtb \
 	exynos7880-a5y17lte_eur_open_02.dtb \
@@ -7,7 +7,7 @@ dtb-$(CONFIG_CONFIG_CAMERA_A5Y17) := \
 	exynos7880-a5y17lte_eur_open_05.dtb \
 	exynos7880-a5y17lte_eur_open_07.dtb \
 	exynos7880-a5y17lte_eur_open_08.dtb
-dtb-$(CONFIG_CONFIG_CAMERA_A7Y17) := \
+dtb-$(CONFIG_CONFIG_CAMERA_A7Y17) += \
 	exynos7880-a7y17lte_eur_open_00.dtb \
 	exynos7880-a7y17lte_eur_open_01.dtb \
 	exynos7880-a7y17lte_eur_open_02.dtb \
