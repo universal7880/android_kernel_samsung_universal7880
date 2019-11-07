@@ -127,7 +127,7 @@ static void s2mu004_fg_test_read(struct i2c_client *client)
 		0x26, 0x27, 0x44, 0x45, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D,
 		0x4E, 0x4F, 0x54, 0x55, 0x56, 0x57
 	};
-	u8 data;
+	u8 data = 0;
 	char str[1016] = {0,};
 	int i = 0, reg_list_size = 0;
 
@@ -535,7 +535,7 @@ static void s2mu004_restart_gauging(struct s2mu004_fuelgauge_data *fuelgauge)
 {
 	u8 temp=0, temp_REG26=0, temp_REG27=0;
 	u8 data[2], r_data[2];
-	u8 v_40;
+	u8 v_40 = 0;
 	pr_err("%s: Re-calculate SOC and voltage\n", __func__);
 
 	mutex_lock(&fuelgauge->fg_lock);
@@ -701,7 +701,7 @@ static int s2mu004_get_rawsoc(struct s2mu004_fuelgauge_data *fuelgauge)
 	int float_voltage = 0;
 
 	/* SOC VM Monitoring For debugging SOC error */
-	u8 r_monoutsel;
+	u8 r_monoutsel = 0;
 	u8 mount_data[2];
 	u32 mount_compliment;
 	int rvmsoc;
@@ -1120,7 +1120,7 @@ static int s2mu004_maintain_avgcurrent(
 static int s2mu004_get_vbat(struct s2mu004_fuelgauge_data *fuelgauge)
 {
 	u8 data[2];
-	u8 vbat_src;
+	u8 vbat_src = 0;
 	u32 vbat = 0;
 
 	if (s2mu004_read_reg(fuelgauge->i2c, S2MU004_REG_RVBAT, data) < 0)
@@ -1346,8 +1346,7 @@ static void s2mu004_fg_reset_capacity_by_jig_connection(struct s2mu004_fuelgauge
 static int s2mu004_fg_aging_check(
 		struct s2mu004_fuelgauge_data *fuelgauge, int step)
 {
-	u8 batcap0, batcap1, batcap2, batcap3;
-	u8 por_state = 0;
+	u8 batcap0 = 0, batcap1 = 0, batcap2 = 0, batcap3 =0, por_state = 0;
 	union power_supply_propval value;
 	int charging_enabled = false;
 

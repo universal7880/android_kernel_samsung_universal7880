@@ -321,7 +321,7 @@ int mcomp_decompress_page(const unsigned char *in, int comp_len, unsigned char *
 {
 	unsigned long flags;
 	struct cout_pool *cout;
-	unsigned char *buf;
+	unsigned char *buf = NULL;
 
 	spin_lock_irqsave(&cout_lock, flags);
 	list_for_each_entry(cout, &cout_list, node) {

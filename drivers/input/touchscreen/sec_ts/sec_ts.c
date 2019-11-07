@@ -629,7 +629,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 {
 	int ret;
 	int is_event_remain;
-	int t_id;
+	int t_id = 0;
 	int event_id;
 	int read_event_count;
 	u8 read_event_buff[SEC_TS_Event_Buff_Size];
@@ -1352,7 +1352,7 @@ static int sec_ts_power(void *data, bool on)
 {
 	struct sec_ts_data *ts = (struct sec_ts_data *)data;
 	const struct sec_ts_plat_data *pdata = ts->plat_data;
-	struct regulator *regulator_dvdd;
+	struct regulator *regulator_dvdd = NULL;
 	struct regulator *regulator_avdd;
 	static bool enabled;
 	int ret = 0;
@@ -1571,7 +1571,7 @@ static int sec_ts_setup_drv_data(struct i2c_client *client)
 #define T_BUFF_SIZE 5
 static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	struct sec_ts_data *ts;
+	struct sec_ts_data *ts = NULL;
 	u8 tBuff[T_BUFF_SIZE];
 #ifndef CONFIG_FW_UPDATE_ON_PROBE
 	const struct firmware *fw_entry;

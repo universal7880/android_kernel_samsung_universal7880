@@ -645,7 +645,7 @@ static struct si47xx_platform_data si47xx_pdata = {
 static int si47xx_i2c_probe(struct i2c_client *client,
 			    const struct i2c_device_id *id)
 {
-	struct si47xx_device_t *si47xx;
+	struct si47xx_device_t *si47xx = NULL;
 	struct si47xx_platform_data *pdata;
 	int ret;
 
