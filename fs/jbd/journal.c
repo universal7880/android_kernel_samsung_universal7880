@@ -850,8 +850,9 @@ journal_t * journal_init_inode (struct inode *inode)
 {
 	struct buffer_head *bh;
 	journal_t *journal = journal_init_common();
-	int err = 0, n = 0;
-	unsigned int blocknr = 0;
+	int err;
+	int n;
+	unsigned int blocknr;
 
 	if (!journal)
 		return NULL;
@@ -988,10 +989,10 @@ static int journal_reset(journal_t *journal)
  **/
 int journal_create(journal_t *journal)
 {
-	unsigned int blocknr = 0;
+	unsigned int blocknr;
 	struct buffer_head *bh;
 	journal_superblock_t *sb;
-	int i = 0, err = 0;
+	int i, err;
 
 	if (journal->j_maxlen < JFS_MIN_JOURNAL_BLOCKS) {
 		printk (KERN_ERR "Journal length (%d blocks) too short.\n",

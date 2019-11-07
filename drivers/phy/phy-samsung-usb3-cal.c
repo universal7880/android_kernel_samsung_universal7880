@@ -129,7 +129,7 @@ void samsung_exynos_cal_usb3phy_enable(struct exynos_usbphy_info *usbphy_info)
 	u32 phyutmi;
 	u32 phyclkrst;
 	u32 phyparam0;
-	u32 phyreg0 = 0;
+	u32 phyreg0;
 	u32 phypipe;
 	u32 linkport;
 

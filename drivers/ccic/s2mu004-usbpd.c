@@ -966,7 +966,7 @@ static int s2mu004_set_data_role(void *_data, int val)
 	struct usbpd_data *data = (struct usbpd_data *) _data;
 	struct s2mu004_usbpd_data *pdic_data = data->phy_driver_data;
 	struct i2c_client *i2c = pdic_data->i2c;
-	u8 val_port = 0, data_role = 0;
+	u8 val_port, data_role;
 
 	/* DATA_ROLE (0x18[2])
 	 * 0 : UFP
@@ -1226,7 +1226,7 @@ static void s2mu004_notify_pdic_rid(struct s2mu004_usbpd_data *pdic_data, int ri
 static void s2mu004_usbpd_check_rid(struct s2mu004_usbpd_data *pdic_data)
 {
 	struct i2c_client *i2c = pdic_data->i2c;
-	u8 rid = 0;
+	u8 rid;
 	int prev_rid = pdic_data->rid;
 
 	s2mu004_usbpd_read_reg(i2c, S2MU004_REG_ADC_STATUS, &rid);
@@ -1254,7 +1254,7 @@ static void s2mu004_usbpd_check_rid(struct s2mu004_usbpd_data *pdic_data)
 #if (defined(CONFIG_DUAL_ROLE_USB_INTF) || defined(CONFIG_TYPEC))
 static int s2mu004_set_attach(struct s2mu004_usbpd_data *pdic_data, u8 mode)
 {
-	u8 data = 0;
+	u8 data;
 	int ret = 0;
 	struct i2c_client *i2c = pdic_data->i2c;
 	struct device *dev = &i2c->dev;
@@ -1310,7 +1310,8 @@ static int s2mu004_set_detach(struct s2mu004_usbpd_data *pdic_data, u8 mode)
 
 int s2mu004_set_normal_mode(struct s2mu004_usbpd_data *pdic_data)
 {
-	u8 data = 0, data_lpm = 0;
+	u8 data;
+	u8 data_lpm;
 	int ret = 0;
 	struct i2c_client *i2c = pdic_data->i2c;
 	struct device *dev = &i2c->dev;
@@ -1361,7 +1362,7 @@ int s2mu004_get_plug_monitor(struct s2mu004_usbpd_data *pdic_data, u8 *data)
 
 int s2mu004_set_lpm_mode(struct s2mu004_usbpd_data *pdic_data)
 {
-	u8 data = 0, data_lpm = 0;
+	u8 data, data_lpm;
 	int ret = 0;
 	struct i2c_client *i2c = pdic_data->i2c;
 	struct device *dev = &i2c->dev;

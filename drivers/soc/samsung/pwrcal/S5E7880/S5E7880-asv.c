@@ -825,7 +825,7 @@ static void asv_voltage_init_table(struct asv_table_list **asv_table, struct pwr
 	struct ect_timing_param_size *size;
 	void *loc;
 	struct dram_vendor_margin_t *mif_margin = NULL;
-	unsigned int vendor_id, margin_idx = 0;
+	unsigned int vendor_id, margin_idx;
 
 	asv_block = ect_get_block("ASV");
 	if (asv_block == NULL)

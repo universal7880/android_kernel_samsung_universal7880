@@ -333,7 +333,7 @@ int timeout_lmk(void)
 	int selected_oom_score_adj[OOM_DEPTH] = {OOM_ADJUST_MAX,};
 	int all_selected_oom = 0;
 	int max_selected_oom_idx = 0;
-	int is_exist_oom_task = 0;
+	int is_exist_oom_task;
 #else
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;

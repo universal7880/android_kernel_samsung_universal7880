@@ -811,7 +811,7 @@ p_err:
 int fimc_is_resource_get(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 {
 	int ret = 0;
-	u32 rsccount = 0;
+	u32 rsccount;
 	struct fimc_is_resource *resource;
 	struct fimc_is_core *core;
 
