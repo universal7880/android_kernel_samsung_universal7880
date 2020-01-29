@@ -563,7 +563,7 @@ static int snd_pcm_hw_params(struct snd_pcm_substream *substream,
 		runtime->boundary *= 2;
 
 	/* clear the buffer for avoiding possible kernel info leaks */
-	if (runtime->dma_area) {
+	if (runtime->dma_area && !substream->ops->copy) {
 		if (substream->ops->clear_buffer)
 			substream->ops->clear_buffer(substream);
 		else
