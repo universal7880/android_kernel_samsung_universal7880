@@ -125,6 +125,18 @@ const struct bpf_func_proto bpf_ktime_get_ns_proto = {
 	.ret_type	= RET_INTEGER,
 };
 
+static u64 bpf_ktime_get_boot_ns(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
+{
+	/* NMI safe access to clock boottime */
+	return ktime_get_boot_fast_ns();
+}
+
+const struct bpf_func_proto bpf_ktime_get_boot_ns_proto = {
+	.func		= bpf_ktime_get_boot_ns,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+};
+
 static u64 bpf_get_current_pid_tgid(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
 {
 	struct task_struct *task = current;

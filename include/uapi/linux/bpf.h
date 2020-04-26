@@ -566,8 +566,8 @@ enum bpf_func_id {
 
 	BPF_FUNC_bind = 64,
 	BPF_FUNC_skb_load_bytes_relative = 68,
-
 	BPF_FUNC_sk_fullsock = 95,
+	BPF_FUNC_ktime_get_boot_ns = 125,
 
 	__BPF_FUNC_MAX_ID,
 };
