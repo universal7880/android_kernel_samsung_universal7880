@@ -321,6 +321,8 @@ static ssize_t gadget_dev_desc_UDC_store(struct gadget_info *gi,
 	int ret;
 
 	pr_info("%s: +++\n", __func__);
+	if (strlen(page) < len)
+		return -EOVERFLOW;
 
 	name = kstrdup(page, GFP_KERNEL);
 	if (!name)
