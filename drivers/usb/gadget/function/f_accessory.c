@@ -1387,6 +1387,15 @@ static void acc_cleanup(void)
 {
 	struct acc_dev *dev = get_acc_dev();
 
+	if (!dev)
+		return;
+
+	/* HID work holds a reference too; drain it before dropping ours. */
+	cancel_delayed_work_sync(&dev->start_work);
+	cancel_work_sync(&dev->hid_work);
+	kill_all_hid_devices(dev);
+	flush_work(&dev->hid_work);
+
 	misc_deregister(&acc_device);
 	put_acc_dev(dev);
 	put_acc_dev(dev); /* Pairs with kref_init() in acc_setup() */
