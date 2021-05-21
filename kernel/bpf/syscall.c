@@ -142,6 +142,23 @@ void bpf_map_put(struct bpf_map *map)
 	}
 }
 
+void bpf_map_put_with_uref(struct bpf_map *map)
+{
+	bpf_map_put_uref(map);
+	bpf_map_put(map);
+}
+
+static int bpf_map_release(struct inode *inode, struct file *filp)
+{
+	struct bpf_map *map = filp->private_data;
+
+	if (map->ops->map_release)
+		map->ops->map_release(map, filp);
+
+	bpf_map_put_with_uref(map);
+	return 0;
+}
+
 #ifdef CONFIG_PROC_FS
 static int bpf_map_show_fdinfo(struct seq_file *m, struct file *filp)
 {
@@ -161,22 +178,6 @@ static int bpf_map_show_fdinfo(struct seq_file *m, struct file *filp)
 }
 #endif
 
-void bpf_map_put_with_uref(struct bpf_map *map)
-{
-	bpf_map_put_uref(map);
-	bpf_map_put(map);
-}
-
-static int bpf_map_release(struct inode *inode, struct file *filp)
-{
-	struct bpf_map *map = filp->private_data;
-
-	if (map->ops->map_release)
-		map->ops->map_release(map, filp);
-
-	bpf_map_put_with_uref(map);
-	return 0;
-}
 
 static const struct file_operations bpf_map_fops = {
 #ifdef CONFIG_PROC_FS
