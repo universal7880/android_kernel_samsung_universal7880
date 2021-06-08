@@ -2179,6 +2179,11 @@ out:
 }
 
 #ifdef CONFIG_SECURITY
+static int proc_pid_attr_open(struct inode *inode, struct file *file)
+{
+	return __mem_open(inode, file, PTRACE_MODE_READ);
+}
+
 static ssize_t proc_pid_attr_read(struct file * file, char __user * buf,
 				  size_t count, loff_t *ppos)
 {
@@ -2206,12 +2211,14 @@ static ssize_t proc_pid_attr_write(struct file * file, const char __user * buf,
 	struct inode * inode = file_inode(file);
 	char *page;
 	ssize_t length;
-	struct task_struct *task = get_proc_task(inode);
+	struct task_struct *task;
 
 	/* A task may only write when it was the opener. */
-	if (file->f_cred != current_real_cred())
+	if (file->private_data != current->mm ||
+	    file->f_cred != current_real_cred())
 		return -EPERM;
 
+	task = get_proc_task(inode);
 	length = -ESRCH;
 	if (!task)
 		goto out_no_task;
@@ -2250,9 +2257,11 @@ out_no_task:
 }
 
 static const struct file_operations proc_pid_attr_operations = {
+	.open		= proc_pid_attr_open,
 	.read		= proc_pid_attr_read,
 	.write		= proc_pid_attr_write,
 	.llseek		= generic_file_llseek,
+	.release	= mem_release,
 };
 
 static const struct pid_entry attr_dir_stuff[] = {
