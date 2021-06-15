@@ -2181,7 +2181,9 @@ out:
 #ifdef CONFIG_SECURITY
 static int proc_pid_attr_open(struct inode *inode, struct file *file)
 {
-	return __mem_open(inode, file, PTRACE_MODE_READ);
+	file->private_data = NULL;
+	__mem_open(inode, file, PTRACE_MODE_READ);
+	return 0;
 }
 
 static ssize_t proc_pid_attr_read(struct file * file, char __user * buf,
