@@ -30,7 +30,6 @@ static int min_sndbuf = SOCK_MIN_SNDBUF;
 static int min_rcvbuf = SOCK_MIN_RCVBUF;
 static int max_skb_frags = MAX_SKB_FRAGS;
 static long long_one __maybe_unused = 1;
-static long long_max __maybe_unused = LONG_MAX;
 
 #ifdef CONFIG_RPS
 static int rps_sock_flow_sysctl(struct ctl_table *table, int write,
@@ -223,17 +222,6 @@ static int set_default_qdisc(struct ctl_table *table, int write,
 
 #ifdef CONFIG_BPF_JIT
 static int
-proc_dointvec_minmax_bpf_restricted(struct ctl_table *table, int write,
-				    void __user *buffer, size_t *lenp,
-				    loff_t *ppos)
-{
-	if (!capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	return proc_dointvec_minmax(table, write, buffer, lenp, ppos);
-}
-
-static int
 proc_dolongvec_minmax_bpf_restricted(struct ctl_table *table, int write,
 				     void __user *buffer, size_t *lenp,
 				     loff_t *ppos)
@@ -326,7 +314,7 @@ static struct ctl_table net_core_table[] = {
 		.mode		= 0600,
 		.proc_handler	= proc_dolongvec_minmax_bpf_restricted,
 		.extra1		= &long_one,
-		.extra2		= &long_max,
+		.extra2		= &bpf_jit_limit_max,
 	},
 #endif
 	{
