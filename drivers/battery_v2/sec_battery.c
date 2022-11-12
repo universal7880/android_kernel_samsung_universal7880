@@ -10,6 +10,15 @@
  * published by the Free Software Foundation.
  */
 #include "include/sec_battery.h"
+
+#ifdef CONFIG_SOC_EXYNOS7880
+static unsigned int STORE_MODE_CHARGING_MAX = 85;
+static unsigned int STORE_MODE_CHARGING_MIN = 15;
+
+module_param_named(store_mode_max, STORE_MODE_CHARGING_MAX, uint, S_IWUSR | S_IRUGO);
+module_param_named(store_mode_min, STORE_MODE_CHARGING_MIN, uint, S_IWUSR | S_IRUGO);
+
+#endif
 #if defined(CONFIG_SEC_ABC)
 #include <linux/sti/abc_common.h>
 #endif
@@ -5632,6 +5641,14 @@ ssize_t sec_bat_store_attrs(
 			ret = count;
 		}
 		break;
+#ifdef CONFIG_SOC_EXYNOS7880
+	case STORE_MODE:
+		if (sscanf(buf, "%10d\n", &x) == 1) {
+			battery->store_mode = !!x;
+			ret = count;
+		}
+		break;
+#else
 	case STORE_MODE:
 		if (sscanf(buf, "%d\n", &x) == 1) {
 #if !defined(CONFIG_SEC_FACTORY)
@@ -5646,6 +5663,7 @@ ssize_t sec_bat_store_attrs(
 			ret = count;
 		}
 		break;
+#endif
 	case UPDATE:
 		if (sscanf(buf, "%d\n", &x) == 1) {
 #ifdef CONFIG_FUELGAUGE_S2MU005
@@ -6804,7 +6822,7 @@ static int sec_bat_get_property(struct power_supply *psy,
 					return 0;
 				}
 			}
-#if defined(CONFIG_STORE_MODE)
+#if defined(CONFIG_STORE_MODE) && !defined(CONFIG_SOC_EXYNOS7880)
 			if (battery->store_mode && !lpcharge &&
 					battery->cable_type != POWER_SUPPLY_TYPE_BATTERY &&
 					battery->status == POWER_SUPPLY_STATUS_DISCHARGING) {
@@ -9895,7 +9913,7 @@ static int sec_battery_probe(struct platform_device *pdev)
 	psy_do_property(battery->pdata->wireless_charger_name, set,
 					POWER_SUPPLY_PROP_CHARGE_TYPE, value);
 
-#if defined(CONFIG_STORE_MODE) && !defined(CONFIG_SEC_FACTORY)
+#if defined(CONFIG_STORE_MODE) && !defined(CONFIG_SEC_FACTORY) && !defined(CONFIG_SOC_EXYNOS7880)
 	battery->store_mode = true;
 #endif
 
