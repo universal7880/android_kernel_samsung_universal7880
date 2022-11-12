@@ -9,7 +9,16 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+
 #include "include/sec_battery.h"
+
+static unsigned int STORE_MODE_CHARGING_MAX = 85;
+static unsigned int STORE_MODE_CHARGING_MIN = 70;
+
+module_param_named(store_mode_max, STORE_MODE_CHARGING_MAX, uint, S_IWUSR | S_IRUGO);
+module_param_named(store_mode_min, STORE_MODE_CHARGING_MIN, uint, S_IWUSR | S_IRUGO);
+
+const char *charger_chip_name;
 
 bool sleep_mode = false;
 
