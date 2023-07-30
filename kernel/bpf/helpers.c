@@ -13,6 +13,7 @@
 #include <linux/rcupdate.h>
 #include <linux/random.h>
 #include <linux/smp.h>
+#include <linux/topology.h>
 #include <linux/ktime.h>
 #include <linux/sched.h>
 #include <linux/uidgid.h>
