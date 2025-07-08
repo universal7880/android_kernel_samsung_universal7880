@@ -542,6 +542,9 @@ enum bpf_func_id {
 	 */
 	BPF_FUNC_set_hash_invalid = 41,
 
+	/* Grow the MAC header area; flags must be zero. */
+	BPF_FUNC_skb_change_head = 43,
+
 
 	/**
 	 * u64 bpf_get_socket_cookie(skb)

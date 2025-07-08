@@ -2133,12 +2133,61 @@ static const struct bpf_func_proto bpf_skb_change_tail_proto = {
 	.arg3_type	= ARG_ANYTHING,
 };
 
+static u32 __bpf_skb_max_len(const struct sk_buff *skb)
+{
+	if (skb_at_tc_ingress(skb) || !skb->dev)
+		return SKB_MAX_ALLOC;
+	return skb->dev->mtu + skb->dev->hard_header_len;
+}
+
+static u64 bpf_skb_change_head(u64 r1, u64 r2, u64 flags, u64 r4, u64 r5)
+{
+	struct sk_buff *skb = (struct sk_buff *) (long) r1;
+	u32 head_room = (u32) r2;
+	u32 max_len = __bpf_skb_max_len(skb);
+	u32 new_len = skb->len + head_room;
+	int ret;
+
+	if (unlikely(flags || (!skb_is_gso(skb) && new_len > max_len) ||
+		     new_len < skb->len))
+		return -EINVAL;
+
+	ret = skb_cow(skb, head_room);
+	if (likely(!ret)) {
+		/* Idea for this helper is that we currently only
+		 * allow to expand on mac header. This means that
+		 * skb->protocol network header, etc, stay as is.
+		 * Compared to bpf_skb_change_tail(), we're more
+		 * flexible due to not needing to linearize or
+		 * reset GSO. Intention for this helper is to be
+		 * used by an L3 skb that needs to push mac header
+		 * for redirection into L2 device.
+		 */
+		__skb_push(skb, head_room);
+		memset(skb->data, 0, head_room);
+		skb_reset_mac_header(skb);
+	}
+
+	bpf_compute_data_end(skb);
+	return ret;
+}
+
+static const struct bpf_func_proto bpf_skb_change_head_proto = {
+	.func		= bpf_skb_change_head,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_CTX,
+	.arg2_type	= ARG_ANYTHING,
+	.arg3_type	= ARG_ANYTHING,
+};
+
 bool bpf_helper_changes_skb_data(void *func)
 {
 	if (func == bpf_skb_vlan_push ||
 	    func == bpf_skb_vlan_pop ||
 	    func == bpf_skb_store_bytes ||
 	    func == bpf_skb_change_proto ||
+	    func == bpf_skb_change_head ||
 	    func == bpf_skb_change_tail ||
 	    func == bpf_skb_pull_data ||
 	    func == bpf_l3_csum_replace ||
