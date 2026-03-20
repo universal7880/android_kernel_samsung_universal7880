@@ -2390,7 +2390,8 @@ static bool __is_valid_access(int off, int size, enum bpf_access_type type)
 		return false;
 	/* Later ABI slots are not all backed by context converters yet. */
 	if (off > offsetof(struct __sk_buff, data_end) &&
-	    off != offsetof(struct __sk_buff, gso_segs))
+	    off != offsetof(struct __sk_buff, gso_segs) &&
+	    off != offsetof(struct __sk_buff, gso_size))
 		return false;
 	/* The verifier guarantees that size > 0. */
 	if (off % size != 0)
@@ -2737,6 +2738,9 @@ static u32 sk_filter_convert_ctx_access(enum bpf_access_type type, int dst_reg,
 #endif
 
 	case offsetof(struct __sk_buff, gso_segs):
+	case offsetof(struct __sk_buff, gso_size):
+		BUILD_BUG_ON(FIELD_SIZEOF(struct skb_shared_info, gso_segs) !=
+			     FIELD_SIZEOF(struct skb_shared_info, gso_size));
 		/* si->dst_reg = skb_shinfo(SKB); */
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
 		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct sk_buff, end),
@@ -2753,7 +2757,9 @@ static u32 sk_filter_convert_ctx_access(enum bpf_access_type type, int dst_reg,
 #endif
 		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct skb_shared_info, gso_segs),
 				      dst_reg, dst_reg,
-				      offsetof(struct skb_shared_info, gso_segs));
+				      ctx_off == offsetof(struct __sk_buff, gso_segs) ?
+				      offsetof(struct skb_shared_info, gso_segs) :
+				      offsetof(struct skb_shared_info, gso_size));
 		break;
 
 	case offsetof(struct __sk_buff, sk):
