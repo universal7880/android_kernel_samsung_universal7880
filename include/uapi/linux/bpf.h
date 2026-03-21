@@ -607,6 +607,11 @@ struct bpf_tunnel_key {
 
 struct bpf_sock {
 	__u32 bound_dev_if;
+	__u32 family;
+	__u32 type;
+	__u32 protocol;
+	__u32 mark;
+	__u32 priority;
 };
 
 #define BPF_TAG_SIZE	8
