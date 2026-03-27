@@ -190,6 +190,8 @@ static const char * const reg_type_str[] = {
 	[PTR_TO_PACKET_END]	= "pkt_end",
 	[PTR_TO_SOCKET]		= "sock",
 	[PTR_TO_SOCKET_OR_NULL] = "sock_or_null",
+	[PTR_TO_SOCK_COMMON] = "sock_common",
+	[PTR_TO_SOCK_COMMON_OR_NULL] = "sock_common_or_null",
 };
 
 static void print_verifier_state(struct bpf_verifier_state *state)
@@ -547,6 +549,8 @@ static bool is_spillable_regtype(enum bpf_reg_type type)
 	case CONST_PTR_TO_MAP:
 	case PTR_TO_SOCKET:
 	case PTR_TO_SOCKET_OR_NULL:
+	case PTR_TO_SOCK_COMMON:
+	case PTR_TO_SOCK_COMMON_OR_NULL:
 		return true;
 	default:
 		return false;
@@ -775,9 +779,14 @@ static bool is_ctx_reg(struct bpf_verifier_env *env, int regno)
 	return reg->type == PTR_TO_CTX;
 }
 
-static int check_sock_access(int off, int size, enum bpf_access_type t)
+static int check_sock_access(int off, int size, enum bpf_access_type t,
+			     enum bpf_reg_type type)
 {
-	if (bpf_sock_is_valid_access(off, size, t))
+	bool valid = type == PTR_TO_SOCK_COMMON ?
+		bpf_sock_common_is_valid_access(off, size, t) :
+		bpf_sock_is_valid_access(off, size, t);
+
+	if (valid)
 		return 0;
 
 	verbose("invalid bpf_sock access off=%d size=%d\n", off, size);
@@ -892,6 +901,11 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 			mark_reg_unknown_value_and_range(state->regs, value_regno);
 			/* note that reg.[id|off|range] == 0 */
 			state->regs[value_regno].type = reg_type;
+			if (reg_type == PTR_TO_SOCK_COMMON_OR_NULL) {
+				state->regs[value_regno].min_value = 0;
+				state->regs[value_regno].max_value = 0;
+				state->regs[value_regno].id = ++env->id_gen;
+			}
 		}
 
 	} else if (reg->type == FRAME_PTR || reg->type == PTR_TO_STACK) {
@@ -925,8 +939,8 @@ static int check_mem_access(struct bpf_verifier_env *env, int insn_idx, u32 regn
 		if (!err && t == BPF_READ && value_regno >= 0)
 			mark_reg_unknown_value_and_range(state->regs,
 							 value_regno);
-	} else if (state->regs[regno].type == PTR_TO_SOCKET) {
-		err = check_sock_access(off, size, t);
+	} else if (reg->type == PTR_TO_SOCKET || reg->type == PTR_TO_SOCK_COMMON) {
+		err = check_sock_access(off, size, t, reg->type);
 		if (!err && value_regno >= 0)
 			mark_reg_unknown_value_and_range(state->regs, value_regno);
 	} else {
@@ -1105,6 +1119,10 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
 	} else if (arg_type == ARG_PTR_TO_CTX) {
 		expected_type = PTR_TO_CTX;
 		if (type != expected_type)
+			goto err_type;
+	} else if (arg_type == ARG_PTR_TO_SOCK_COMMON) {
+		expected_type = PTR_TO_SOCK_COMMON;
+		if (type != PTR_TO_SOCK_COMMON && type != PTR_TO_SOCKET)
 			goto err_type;
 	} else if (arg_type == ARG_PTR_TO_SOCKET) {
 		expected_type = PTR_TO_SOCKET;
@@ -2349,7 +2367,8 @@ static void mark_ptr_or_null_reg(struct bpf_reg_state *regs, u32 regno, u32 id,
 	struct bpf_reg_state *reg = &regs[regno];
 
 	if ((reg->type == PTR_TO_MAP_VALUE_OR_NULL ||
-	     reg->type == PTR_TO_SOCKET_OR_NULL) && reg->id == id) {
+	     reg->type == PTR_TO_SOCKET_OR_NULL ||
+	     reg->type == PTR_TO_SOCK_COMMON_OR_NULL) && reg->id == id) {
 		if (type == UNKNOWN_VALUE) {
 			__mark_reg_unknown_value(regs, regno);
 		} else if (reg->type == PTR_TO_MAP_VALUE_OR_NULL) {
@@ -2361,6 +2380,8 @@ static void mark_ptr_or_null_reg(struct bpf_reg_state *regs, u32 regno, u32 id,
 			}
 		} else if (reg->type == PTR_TO_SOCKET_OR_NULL) {
 			reg->type = PTR_TO_SOCKET;
+		} else if (reg->type == PTR_TO_SOCK_COMMON_OR_NULL) {
+			reg->type = PTR_TO_SOCK_COMMON;
 		}
 		/* We don't need id from this point onwards anymore, thus we
 		 * should better reset it, so that state pruning has chances
@@ -2477,7 +2498,8 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 	if (BPF_SRC(insn->code) == BPF_K &&
 	    insn->imm == 0 && (opcode == BPF_JEQ || opcode == BPF_JNE) &&
 	    (dst_reg->type == PTR_TO_MAP_VALUE_OR_NULL ||
-	     dst_reg->type == PTR_TO_SOCKET_OR_NULL)) {
+	     dst_reg->type == PTR_TO_SOCKET_OR_NULL ||
+	     dst_reg->type == PTR_TO_SOCK_COMMON_OR_NULL)) {
 		/* Mark all pointer aliases in each branch as either
 		 * safe or unknown depending R == 0 or R != 0 conditional.
 		 */
@@ -3045,6 +3067,8 @@ static bool reg_type_mismatch_ok(enum bpf_reg_type type)
 	case PTR_TO_CTX:
 	case PTR_TO_SOCKET:
 	case PTR_TO_SOCKET_OR_NULL:
+	case PTR_TO_SOCK_COMMON:
+	case PTR_TO_SOCK_COMMON_OR_NULL:
 		return false;
 	default:
 		return true;
@@ -3597,7 +3621,8 @@ static int convert_ctx_accesses(struct bpf_verifier_env *env)
 			continue;
 		}
 
-		if (env->insn_aux_data[i + delta].ptr_type == PTR_TO_SOCKET) {
+		if (env->insn_aux_data[i + delta].ptr_type == PTR_TO_SOCKET ||
+		    env->insn_aux_data[i + delta].ptr_type == PTR_TO_SOCK_COMMON) {
 			cnt = bpf_sock_convert_ctx_access(type, insn->dst_reg,
 						insn->src_reg, insn->off,
 						insn_buf, env->prog);

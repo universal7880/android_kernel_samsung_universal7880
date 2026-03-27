@@ -2192,6 +2192,22 @@ static const struct bpf_func_proto bpf_get_socket_uid_proto = {
 	.arg1_type      = ARG_PTR_TO_CTX,
 };
 
+static u64 bpf_sk_fullsock(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
+{
+	struct sock *sk = (struct sock *)(long)r1;
+
+	/* The 3.18 predicate predates TCP_NEW_SYN_RECV support. */
+	return sk && sk->sk_state != TCP_NEW_SYN_RECV && sk_fullsock(sk) ?
+		(unsigned long)sk : 0;
+}
+
+static const struct bpf_func_proto bpf_sk_fullsock_proto = {
+	.func = bpf_sk_fullsock,
+	.gpl_only = false,
+	.ret_type = RET_PTR_TO_SOCKET_OR_NULL,
+	.arg1_type = ARG_PTR_TO_SOCK_COMMON,
+};
+
 static const struct bpf_func_proto *
 bpf_base_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
@@ -2302,6 +2318,8 @@ static const struct bpf_func_proto *
 tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
+	case BPF_FUNC_sk_fullsock:
+		return &bpf_sk_fullsock_proto;
 	case BPF_FUNC_skb_store_bytes:
 		return &bpf_skb_store_bytes_proto;
 	case BPF_FUNC_skb_load_bytes:
@@ -2357,6 +2375,8 @@ static const struct bpf_func_proto *
 cg_skb_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
 	switch (func_id) {
+	case BPF_FUNC_sk_fullsock:
+		return &bpf_sk_fullsock_proto;
 	case BPF_FUNC_skb_load_bytes:
 		return &bpf_skb_load_bytes_proto;
 	default:
@@ -2386,6 +2406,14 @@ static bool sk_filter_is_valid_access(int off, int size,
 				      enum bpf_reg_type *reg_type,
 				      const struct bpf_prog *prog)
 {
+	if (off == offsetof(struct __sk_buff, sk)) {
+		if (prog->type != BPF_PROG_TYPE_CGROUP_SKB ||
+		    type != BPF_READ || size != sizeof(__u64))
+			return false;
+		*reg_type = PTR_TO_SOCK_COMMON_OR_NULL;
+		return true;
+	}
+
 	switch (off) {
 	case offsetof(struct __sk_buff, tc_classid):
 	case offsetof(struct __sk_buff, data):
@@ -2404,6 +2432,14 @@ static bool sk_filter_is_valid_access(int off, int size,
 	}
 
 	return __is_valid_access(off, size, type);
+}
+
+bool bpf_sock_common_is_valid_access(int off, int size, enum bpf_access_type type)
+{
+	/* Only these existing ABI fields reside in sock_common. */
+	return (off == offsetof(struct bpf_sock, bound_dev_if) ||
+		off == offsetof(struct bpf_sock, family)) &&
+	       bpf_sock_is_valid_access(off, size, type);
 }
 
 bool bpf_sock_is_valid_access(int off, int size, enum bpf_access_type type)
@@ -2486,6 +2522,13 @@ static bool tc_cls_act_is_valid_access(int off, int size,
 				       enum bpf_reg_type *reg_type,
 				      const struct bpf_prog *prog)
 {
+	if (off == offsetof(struct __sk_buff, sk)) {
+		if (type != BPF_READ || size != sizeof(__u64))
+			return false;
+		*reg_type = PTR_TO_SOCK_COMMON_OR_NULL;
+		return true;
+	}
+
 	if (type == BPF_WRITE) {
 		switch (off) {
 		case offsetof(struct __sk_buff, mark):
@@ -2711,6 +2754,12 @@ static u32 sk_filter_convert_ctx_access(enum bpf_access_type type, int dst_reg,
 		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct skb_shared_info, gso_segs),
 				      dst_reg, dst_reg,
 				      offsetof(struct skb_shared_info, gso_segs));
+		break;
+
+	case offsetof(struct __sk_buff, sk):
+		*insn++ = BPF_LDX_MEM(BPF_FIELD_SIZEOF(struct sk_buff, sk),
+				      dst_reg, src_reg,
+				      offsetof(struct sk_buff, sk));
 		break;
 
 	}

@@ -564,6 +564,8 @@ enum bpf_func_id {
 	BPF_FUNC_bind = 64,
 	BPF_FUNC_skb_load_bytes_relative = 68,
 
+	BPF_FUNC_sk_fullsock = 95,
+
 	__BPF_FUNC_MAX_ID,
 };
 
@@ -676,6 +678,7 @@ struct __sk_buff {
 	__u64 tstamp;
 	__u32 wire_len;
 	__u32 gso_segs;
+	__bpf_md_ptr(struct bpf_sock *, sk);
 };
 
 struct bpf_tunnel_key {
