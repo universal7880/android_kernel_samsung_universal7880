@@ -57,17 +57,19 @@ struct devtable {
  *  b) we need a API call to get the respective section symbols */
 #if defined(__MACH__)
 #include <mach-o/getsect.h>
+#include <mach-o/ldsyms.h>
 
 #define INIT_SECTION(name)  do {					\
 		unsigned long name ## _len;				\
-		char *__cat(pstart_,name) = getsectdata("__TEXT",	\
-			#name, &__cat(name,_len));			\
+		char *__cat(pstart_,name) = (char *)getsectiondata(	\
+			&_mh_execute_header, "__DATA", #name,		\
+			&__cat(name,_len));			\
 		char *__cat(pstop_,name) = __cat(pstart_,name) +	\
 			__cat(name, _len);				\
 		__cat(__start_,name) = (void *)__cat(pstart_,name);	\
 		__cat(__stop_,name) = (void *)__cat(pstop_,name);	\
 	} while (0)
-#define SECTION(name)   __attribute__((section("__TEXT, " #name)))
+#define SECTION(name)   __attribute__((section("__DATA," #name)))
 
 struct devtable **__start___devtable, **__stop___devtable;
 #else
