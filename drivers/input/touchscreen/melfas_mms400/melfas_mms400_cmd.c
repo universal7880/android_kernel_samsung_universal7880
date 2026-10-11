@@ -1625,7 +1625,7 @@ static ssize_t mms_sys_dt2w_enable_store(struct device *dev,
 	}
 
 	if (enable == info->dt2w_enable)
-		return 0;
+		return count;
 
 	mutex_lock(&info->lock);
 	info->cmd_busy = true;
@@ -1645,7 +1645,7 @@ static ssize_t mms_sys_dt2w_enable_store(struct device *dev,
 	mutex_lock(&info->lock);
 	info->cmd_busy = false;
 	mutex_unlock(&info->lock);
-	return 0;
+	return count;
 }
 
 static DEVICE_ATTR(dt2w_enable, 0660, mms_sys_dt2w_enable_show, mms_sys_dt2w_enable_store);
