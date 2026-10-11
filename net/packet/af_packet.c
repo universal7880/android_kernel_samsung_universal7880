@@ -1483,7 +1483,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 
 	spin_lock(&po->bind_lock);
 	if (po->running &&
-	    match->type == type &&
+		match->type == type &&
 	    match->prot_hook.type == po->prot_hook.type &&
 	    match->prot_hook.dev == po->prot_hook.dev) {
 		err = -ENOSPC;
@@ -2724,7 +2724,6 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 		BUG_ON(po->running);
 		po->num = proto;
 		po->prot_hook.type = proto;
-
 		if (unlikely(unlisted)) {
 			dev_put(dev);
 			po->prot_hook.dev = NULL;
@@ -3845,7 +3844,7 @@ static int packet_set_ring(struct sock *sk, union tpacket_req_u *req_u,
 			goto out;
 		if (po->tp_version >= TPACKET_V3 &&
 		    req->tp_block_size <=
-			  BLK_PLUS_PRIV((u64)req_u->req3.tp_sizeof_priv))
+		      BLK_PLUS_PRIV((u64)req_u->req3.tp_sizeof_priv))
 			goto out;
 		if (unlikely(req->tp_frame_size < po->tp_hdrlen +
 					po->tp_reserve))

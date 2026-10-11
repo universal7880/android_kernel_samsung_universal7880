@@ -327,9 +327,15 @@ int tracing_is_enabled(void)
  * boot time and run time configurable.
  */
 #define TRACE_BUF_SIZE_DEFAULT	1441792UL /* 16384 * 88 (sizeof(entry)) */
+#define TRACE_BUF_SIZE_MINIMUM	4096UL
 
-static unsigned long		trace_buf_size = TRACE_BUF_SIZE_DEFAULT;
-
+unsigned long		trace_buf_size = TRACE_BUF_SIZE_MINIMUM;
+#ifdef CONFIG_SEC_DEBUG
+#define SIZE_CPUX_DEFAULT 4194304UL
+#define CPU0_to_CPUX_RATIO (1.2)
+static unsigned long        size_cpu0 = (SIZE_CPUX_DEFAULT * CPU0_to_CPUX_RATIO);
+static unsigned long        size_cpuX = SIZE_CPUX_DEFAULT;
+#endif
 /* trace_types holds a link list of available tracers. */
 static struct tracer		*trace_types __read_mostly;
 
@@ -2069,6 +2075,13 @@ void trace_printk_init_buffers(void)
 	if (alloc_percpu_trace_buffer())
 		return;
 
+	/*
+	 * When tracing is off, trace_printk() calls have no effect
+	 * When tracing is enabled, instead, trace_printk() data can be made
+	 * available to a developer with far less overhead than normal printk() output
+	 * SEC turns tracing off at DEBUG LEVEL LOW (USER mode)
+	 */
+#if 0
 	/* trace_printk() is for debug use only. Don't use it in production. */
 
 	pr_warning("\n**********************************************************\n");
@@ -2087,7 +2100,7 @@ void trace_printk_init_buffers(void)
 
 	/* Expand the buffers to set size */
 	tracing_update_buffers();
-
+#endif
 	buffers_allocated = 1;
 
 	/*
@@ -4217,11 +4230,36 @@ out:
 int tracing_update_buffers(void)
 {
 	int ret = 0;
-
+#ifdef CONFIG_SEC_DEBUG
+	int i = 0;
+	unsigned long size;
+#endif
 	mutex_lock(&trace_types_lock);
+#ifdef CONFIG_SEC_DEBUG
+	if (!ring_buffer_expanded) {
+		if ((totalram_pages << (PAGE_SHIFT - 10)) > (1 << 20)) {
+			size_cpu0 = (SIZE_CPUX_DEFAULT * CPU0_to_CPUX_RATIO * 1.25);
+			size_cpuX = (SIZE_CPUX_DEFAULT * 1.25);
+		}
+
+		for_each_tracing_cpu(i) {
+			if (i == 0)
+				size = size_cpu0;
+			else
+				size = size_cpuX;
+			ret = __tracing_resize_ring_buffer(&global_trace, size, i);
+			if (ret < 0) {
+				pr_debug("[ftrace]fail to update cpu%d ring buffer to %lu KB\n",
+					i, size);
+				break;
+			}
+		}
+	}
+#else
 	if (!ring_buffer_expanded)
 		ret = __tracing_resize_ring_buffer(&global_trace, trace_buf_size,
 						RING_BUFFER_ALL_CPUS);
+#endif
 	mutex_unlock(&trace_types_lock);
 
 	return ret;
