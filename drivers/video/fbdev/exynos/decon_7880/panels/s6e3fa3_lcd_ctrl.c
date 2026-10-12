@@ -17,31 +17,27 @@
 #include "../decon_notify.h"
 #include "../decon_board.h"
 
-#if defined(CONFIG_PANEL_S6E3FA3_A7Y17)
-#include "s6e3fa3_a7y17_param.h"
-#elif defined(CONFIG_PANEL_S6E3FA3_A5Y17)
-#include "s6e3fa3_a5y17_param.h"
-#endif
+#include "s6e3fa3_panel.h"
+#include "s6e3fa3_panel_params.h"
 
-#if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
+#ifdef CONFIG_EXYNOS_DECON_MDNIE_LITE
 #include "mdnie.h"
-#if defined(CONFIG_PANEL_S6E3FA3_A7Y17)
-#include "mdnie_lite_table_a7y17.h"
-#elif defined(CONFIG_PANEL_S6E3FA3_A5Y17)
-#include "mdnie_lite_table_a5y17.h"
-#endif
 #endif
 
 #ifdef CONFIG_DISPLAY_USE_INFO
 #include "dpui.h"
+#define DPUI_VENDOR_NAME "SDC"
+#endif
 
-#define	DPUI_VENDOR_NAME	"SDC"
-#if defined(CONFIG_PANEL_S6E3FA3_A7Y17)
-#define DPUI_MODEL_NAME		"AMS568MW"
-#elif defined(CONFIG_PANEL_S6E3FA3_A5Y17)
-#define DPUI_MODEL_NAME		"AMS520MV"
+static const struct of_device_id s6e3fa3_panel_of_match[] = {
+#ifdef CONFIG_PANEL_S6E3FA3_A5Y17
+	{ .compatible = "samsung,s6e3fa3-a5y17", .data = &s6e3fa3_a5y17_panel },
 #endif
+#ifdef CONFIG_PANEL_S6E3FA3_A7Y17
+	{ .compatible = "samsung,s6e3fa3-a7y17", .data = &s6e3fa3_a7y17_panel },
 #endif
+	{ }
+};
 
 #define DSI_WRITE(cmd, size)		do {				\
 	ret = dsim_write_hl_data(lcd, cmd, size);			\
@@ -96,6 +92,7 @@ struct hbm_interpolation_t {
 };
 
 struct lcd_info {
+	const struct s6e3fa3_panel_data *panel;
 	unsigned int			connected;
 	unsigned int			bl;
 	unsigned int			brightness;
@@ -449,9 +446,9 @@ static void init_dynamic_aid(struct lcd_info *lcd)
 	lcd->daid.ibr_tbl = index_brightness_table;
 	lcd->daid.ibr_max = IBRIGHTNESS_MAX;
 
-	lcd->daid.offset_color = (const struct rgb_t(*)[])offset_color;
+	lcd->daid.offset_color = (const struct rgb_t(*)[])lcd->panel->offset_color;
 	lcd->daid.iv_ref = index_voltage_reference;
-	lcd->daid.m_gray = m_gray;
+	lcd->daid.m_gray = lcd->panel->m_gray;
 }
 
 /* V255(msb is separated) ~ VT -> VT ~ V255(msb is not separated) and signed bit */
@@ -775,8 +772,8 @@ static int s6e3fa3_init_elvss(struct lcd_info *lcd, u8 *data)
 			memcpy(&lcd->elvss_table[i][temp][1], data, LDI_LEN_ELVSS);
 
 			lcd->elvss_table[i][temp][0] = LDI_REG_ELVSS;
-			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_1] = elvss_mpscon_offset_data[i][LDI_OFFSET_ELVSS_1];
-			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_2] = elvss_mpscon_offset_data[i][LDI_OFFSET_ELVSS_2];
+			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_1] = lcd->panel->elvss[i][LDI_OFFSET_ELVSS_1];
+			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_2] = lcd->panel->elvss[i][LDI_OFFSET_ELVSS_2];
 		}
 	}
 
@@ -793,8 +790,8 @@ static int s6e3fa3_init_hbm_elvss(struct lcd_info *lcd, u8 *data)
 			memcpy(&lcd->elvss_table[i][temp][1], data, LDI_LEN_ELVSS);
 
 			lcd->elvss_table[i][temp][0] = LDI_REG_ELVSS;
-			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_1] = elvss_mpscon_offset_data[i][LDI_OFFSET_ELVSS_1];
-			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_2] = elvss_mpscon_offset_data[i][LDI_OFFSET_ELVSS_2];
+			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_1] = lcd->panel->elvss[i][LDI_OFFSET_ELVSS_1];
+			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_2] = lcd->panel->elvss[i][LDI_OFFSET_ELVSS_2];
 			lcd->elvss_table[i][temp][LDI_OFFSET_ELVSS_3] = data[LDI_GPARA_HBM_ELVSS];
 		}
 	}
@@ -1058,7 +1055,7 @@ static int panel_dpui_notifier_callback(struct notifier_block *self,
 	set_dpui_field(DPUI_KEY_LCDID2, tbuf, size);
 	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%d", lcd->id_info.id[2]);
 	set_dpui_field(DPUI_KEY_LCDID3, tbuf, size);
-	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%s_%s", DPUI_VENDOR_NAME, DPUI_MODEL_NAME);
+	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "%s_%s", DPUI_VENDOR_NAME, lcd->panel->model);
 	set_dpui_field(DPUI_KEY_DISP_MODEL, tbuf, size);
 
 	size = snprintf(tbuf, MAX_DPUI_VAL_LEN, "0x%02X%02X%02X%02X%02X",
@@ -1161,7 +1158,7 @@ static int s6e3fa3_probe(struct lcd_info *lcd)
 
 	lcd->acl_table = ACL_TABLE;
 	lcd->opr_table = OPR_TABLE;
-	lcd->aor_table = AOR_TABLE;
+	lcd->aor_table = lcd->panel->aor;
 	lcd->tset_param = SEQ_TSET_SETTING;
 
 	ret = s6e3fa3_read_init_info(lcd);
@@ -1182,28 +1179,28 @@ int s6e3fa3_setalpm(struct lcd_info *lcd, int mode)
 
 	switch (mode) {
 	case HLPM_ON_LOW:
-		DSI_WRITE(SEQ_SELECT_HLPM_02, ARRAY_SIZE(SEQ_SELECT_HLPM_02));
+		DSI_WRITE(lcd->panel->hlpm_02.cmd, lcd->panel->hlpm_02.len);
 		DSI_WRITE(SEQ_SELECT_02NIT_ON, ARRAY_SIZE(SEQ_SELECT_02NIT_ON));
 		DSI_WRITE(SEQ_SRC_LOAD_EN_HLPM, ARRAY_SIZE(SEQ_SRC_LOAD_EN_HLPM));
 		DSI_WRITE(SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE));
 		dev_info(&lcd->ld->dev, "%s: HLPM_ON_02\n", __func__);
 		break;
 	case HLPM_ON_HIGH:
-		DSI_WRITE(SEQ_SELECT_HLPM_60, ARRAY_SIZE(SEQ_SELECT_HLPM_60));
+		DSI_WRITE(lcd->panel->hlpm_60.cmd, lcd->panel->hlpm_60.len);
 		DSI_WRITE(SEQ_SELECT_60NIT_ON, ARRAY_SIZE(SEQ_SELECT_60NIT_ON));
 		DSI_WRITE(SEQ_SRC_LOAD_EN_HLPM, ARRAY_SIZE(SEQ_SRC_LOAD_EN_HLPM));
 		DSI_WRITE(SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE));
 		dev_info(&lcd->ld->dev, "%s: HLPM_ON_60\n", __func__);
 		break;
 	case ALPM_ON_LOW:
-		DSI_WRITE(SEQ_SELECT_ALPM_02, ARRAY_SIZE(SEQ_SELECT_ALPM_02));
+		DSI_WRITE(lcd->panel->alpm_02.cmd, lcd->panel->alpm_02.len);
 		DSI_WRITE(SEQ_SELECT_02NIT_ON, ARRAY_SIZE(SEQ_SELECT_02NIT_ON));
 		DSI_WRITE(SEQ_SRC_LOAD_EN_ALPM, ARRAY_SIZE(SEQ_SRC_LOAD_EN_ALPM));
 		DSI_WRITE(SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE));
 		dev_info(&lcd->ld->dev, "%s: ALPM_ON_02\n", __func__);
 		break;
 	case ALPM_ON_HIGH:
-		DSI_WRITE(SEQ_SELECT_ALPM_60, ARRAY_SIZE(SEQ_SELECT_ALPM_60));
+		DSI_WRITE(lcd->panel->alpm_60.cmd, lcd->panel->alpm_60.len);
 		DSI_WRITE(SEQ_SELECT_60NIT_ON, ARRAY_SIZE(SEQ_SELECT_60NIT_ON));
 		DSI_WRITE(SEQ_SRC_LOAD_EN_ALPM, ARRAY_SIZE(SEQ_SRC_LOAD_EN_ALPM));
 		DSI_WRITE(SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE));
@@ -1901,16 +1898,52 @@ exit:
 }
 #endif
 
+static const struct s6e3fa3_panel_data *s6e3fa3_get_panel_data(struct dsim_device *dsim)
+{
+	const struct of_device_id *match;
+	struct device_node *node;
+
+	node = of_parse_phandle(dsim->dev->of_node, "lcd_info", 0);
+	match = of_match_node(s6e3fa3_panel_of_match, node);
+	of_node_put(node);
+	if (match)
+		return match->data;
+
+	/* Keep support for old device trees in single-panel builds. */
+#if defined(CONFIG_PANEL_S6E3FA3_A5Y17) && !defined(CONFIG_PANEL_S6E3FA3_A7Y17)
+	return &s6e3fa3_a5y17_panel;
+#elif defined(CONFIG_PANEL_S6E3FA3_A7Y17) && !defined(CONFIG_PANEL_S6E3FA3_A5Y17)
+	return &s6e3fa3_a7y17_panel;
+#else
+	return NULL;
+#endif
+}
+
 static int dsim_panel_probe(struct dsim_device *dsim)
 {
 	int ret = 0;
 	struct lcd_info *lcd;
+
+	BUILD_BUG_ON(ARRAY_SIZE(SEQ_GAMMA_CONDITION_SET) != GAMMA_CMD_CNT);
+	BUILD_BUG_ON(ARRAY_SIZE(SEQ_ACL_OFF) != ACL_CMD_CNT);
+	BUILD_BUG_ON(ARRAY_SIZE(SEQ_ACL_OPR_OFF) != OPR_CMD_CNT);
+	BUILD_BUG_ON(ARRAY_SIZE(SEQ_ELVSS_SET) != ELVSS_CMD_CNT);
+	BUILD_BUG_ON(ARRAY_SIZE(SEQ_AID_SETTING) != AID_CMD_CNT);
+	BUILD_BUG_ON(ARRAY_SIZE(SEQ_TSET_SETTING) != TSET_CMD_CNT);
 
 	dsim->priv.par = lcd = kzalloc(sizeof(struct lcd_info), GFP_KERNEL);
 	if (!lcd) {
 		pr_err("%s: failed to allocate for lcd\n", __func__);
 		ret = -ENOMEM;
 		goto exit;
+	}
+
+	lcd->panel = s6e3fa3_get_panel_data(dsim);
+	if (!lcd->panel) {
+		dev_err(dsim->dev, "unknown S6E3FA3 panel compatible\n");
+		kfree(lcd);
+		dsim->priv.par = NULL;
+		return -ENODEV;
 	}
 
 	dsim->lcd = lcd->ld = lcd_device_register("panel", dsim->dev, lcd, NULL);
@@ -1937,7 +1970,7 @@ static int dsim_panel_probe(struct dsim_device *dsim)
 	lcd_init_sysfs(lcd);
 
 #if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
-	mdnie_register(&lcd->ld->dev, lcd, (mdnie_w)mdnie_lite_send_seq, (mdnie_r)mdnie_lite_read, lcd->coordinate, &tune_info);
+	mdnie_register(&lcd->ld->dev, lcd, (mdnie_w)mdnie_lite_send_seq, (mdnie_r)mdnie_lite_read, lcd->coordinate, lcd->panel->mdnie);
 	lcd->mdnie_class = get_mdnie_class();
 #endif
 
