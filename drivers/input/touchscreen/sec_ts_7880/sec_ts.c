@@ -36,7 +36,7 @@
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_DMY
 #include <linux/trustedui.h>
-struct sec_ts_data *tui_tsp_info;
+static struct sec_ts_data *tui_tsp_info;
 #endif
 
 #ifdef CONFIG_OF
@@ -1852,7 +1852,7 @@ void sec_ts_release_all_finger(struct sec_ts_data *ts)
 }
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_DMY
-void trustedui_mode_on(void){
+void sec_ts_trustedui_mode_on(void){
 	tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
 	sec_ts_release_all_finger(tui_tsp_info);
 }

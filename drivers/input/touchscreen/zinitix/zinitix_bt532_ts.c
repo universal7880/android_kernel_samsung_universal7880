@@ -2105,7 +2105,7 @@ void zinitix_trustedui_mode_on(void){
 #endif
 }
 
-void trustedui_mode_off(void){
+void zinitix_trustedui_mode_off(void){
 	input_info(true, &tui_tsp_info->client->dev, "%s : esd timer enable", __func__);
 #if ESD_TIMER_INTERVAL
 	write_reg(tui_tsp_info->client, BT532_PERIODICAL_INTERRUPT_INTERVAL,
