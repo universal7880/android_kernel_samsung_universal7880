@@ -118,6 +118,3 @@ define archhelp
   echo  '                  (distribution) /sbin/installkernel or'
   echo  '                  install to $$(INSTALL_PATH) and run lilo'
 endef
-
-# Apply device fragments after the shared configuration, even with parallel make.
-a5y17lte.config a7y17lte.config: lineage-universal7880_defconfig

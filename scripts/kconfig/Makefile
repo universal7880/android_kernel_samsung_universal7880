@@ -113,9 +113,6 @@ $(Q)$(CONFIG_SHELL) $(srctree)/scripts/kconfig/merge_config.sh -m -O $(objtree) 
 +$(Q)yes "" | $(MAKE) -f $(srctree)/Makefile oldconfig
 endef
 
-%.config: $(obj)/conf
-	$(call mergeconfig,$*)
-
 PHONY += kvmconfig
 kvmconfig:
 	$(call mergeconfig,kvm_guest)
