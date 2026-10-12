@@ -1,0 +1,10 @@
+Samsung S6E3FA3 panels on Galaxy A5/A7 (2017)
+
+The panel node referenced by the DSIM lcd_info phandle must identify its
+command, dimming and mDNIe tables through compatible:
+
+- "samsung,s6e3fa3-a5y17": Galaxy A5 (2017), AMS520MV
+- "samsung,s6e3fa3-a7y17": Galaxy A7 (2017), AMS568MW
+
+The shared driver selects the matching table set before probing the panel.
+Existing timing, power and GPIO properties are unchanged.

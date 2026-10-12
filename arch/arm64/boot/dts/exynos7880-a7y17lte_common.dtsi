@@ -968,6 +968,7 @@
 	};
 
 	s6e3fa3: s6e3fa3_fhd {
+		compatible = "samsung,s6e3fa3-a7y17";
 		mode = <2>;	/* 2: MIPI command mode */
 		resolution = <1080 1920>;
 		size = <71 126>;
