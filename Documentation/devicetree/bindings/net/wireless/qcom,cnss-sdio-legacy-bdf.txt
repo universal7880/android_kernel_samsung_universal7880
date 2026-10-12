@@ -1,0 +1,15 @@
+Optional legacy board-data selection for QCA9377 SDIO
+
+The node with compatible = "qcom,cnss_sdio" may specify:
+
+- qcom,legacy-bdf-max-hw-revision: maximum Samsung board_id that requires
+  bdwlan30_OLD.bin and utfbd30_OLD.bin. A value of zero disables this choice.
+  The value must fit in a signed 32-bit integer.
+
+The board_id comes from Samsung's SEC_BSP support. If this property is
+absent, the existing CONFIG_WLAN_QCA9377_DUAL_BDF threshold is retained.
+With no Samsung board-id provider and a zero configured threshold, legacy
+board-data selection remains disabled.
+
+Galaxy A5 (2017) uses <3>; Galaxy A7 (2017) leaves the property absent and
+uses the shared configuration's zero threshold.

@@ -59,15 +59,15 @@
 #endif
 
 #include "qwlan_version.h"
+#include <linux/of.h>
 
 #ifdef FEATURE_SECURE_FIRMWARE
 static struct hash_fw fw_hash;
 #endif
 
-#if defined(CONFIG_WLAN_QCA9377_DUAL_BDF) &&  \
-	(CONFIG_WLAN_QCA9377_DUAL_BDF > 0)
+#if defined(CONFIG_SEC_BSP) || (CONFIG_WLAN_QCA9377_DUAL_BDF > 0)
 extern int board_id;
-#endif /* CONFIG_WLAN_QCA9377_DUAL_BDF */
+#endif
 
 #if defined(HIF_PCI) || defined(HIF_SDIO)
 static u_int32_t refclk_speed_to_hz[] = {
@@ -105,14 +105,11 @@ static struct ol_fw_files FW_FILES_QCA6174_FW_1_3 = {
 	PREFIX "otp13.bin", PREFIX "utf13.bin",
 	PREFIX "utfbd13.bin", PREFIX "qsetup13.bin",
 	PREFIX "epping13.bin"};
-#if defined(CONFIG_WLAN_QCA9377_DUAL_BDF) &&  \
-	(CONFIG_WLAN_QCA9377_DUAL_BDF > 0)
 static struct ol_fw_files FW_FILES_QCA6174_FW_3_0_OLD = {
 	PREFIX "qwlan30.bin", PREFIX "qwlan30i.bin", PREFIX "bdwlan30_OLD.bin",
 	PREFIX "otp30.bin", PREFIX "utf30.bin",
 	PREFIX "utfbd30_OLD.bin", PREFIX "qsetup30.bin",
 	PREFIX "epping30.bin"};
-#endif /* CONFIG_WLAN_QCA9377_DUAL_BDF */
 static struct ol_fw_files FW_FILES_QCA6174_FW_3_0 = {
 	PREFIX "qwlan30.bin", PREFIX "qwlan30i.bin", PREFIX "bdwlan30.bin",
 	PREFIX "otp30.bin", PREFIX "utf30.bin",
@@ -125,6 +122,26 @@ static struct ol_fw_files FW_FILES_DEFAULT = {
 	PREFIX "epping.bin"};
 
 static A_STATUS ol_sdio_extra_initialization(struct ol_softc *scn);
+
+static bool ol_sdio_use_legacy_bdf(void)
+{
+#if defined(CONFIG_SEC_BSP) || (CONFIG_WLAN_QCA9377_DUAL_BDF > 0)
+    struct device_node *node;
+    u32 max_revision = CONFIG_WLAN_QCA9377_DUAL_BDF;
+
+    node = of_find_compatible_node(NULL, NULL, "qcom,cnss_sdio");
+    if (node) {
+        of_property_read_u32(node, "qcom,legacy-bdf-max-hw-revision",
+                             &max_revision);
+        of_node_put(node);
+    }
+
+    return max_revision && max_revision <= INT_MAX &&
+           board_id <= (int)max_revision;
+#else
+    return false;
+#endif
+}
 
 static int ol_get_fw_files_for_target(struct ol_fw_files *pfw_files,
                                  u32 target_version)
@@ -148,18 +165,13 @@ static int ol_get_fw_files_for_target(struct ol_fw_files *pfw_files,
             memcpy(pfw_files, &FW_FILES_QCA6174_FW_3_0, sizeof(*pfw_files));
             break;
     case QCA9377_REV1_1_VERSION:
-#if defined(CONFIG_WLAN_QCA9377_DUAL_BDF) &&  \
-	(CONFIG_WLAN_QCA9377_DUAL_BDF > 0)
-		if (board_id <= CONFIG_WLAN_QCA9377_DUAL_BDF) {
+		if (ol_sdio_use_legacy_bdf()) {
 			printk(" Hw rev %d: loading the bdwlan30_OLD.bin \n", board_id);
 			memcpy(pfw_files, &FW_FILES_QCA6174_FW_3_0_OLD, sizeof(*pfw_files));
 		} else {
 			printk(" Hw rev %d: loading the bdwlan30.bin \n", board_id);
 			memcpy(pfw_files, &FW_FILES_QCA6174_FW_3_0, sizeof(*pfw_files));
 		}
-#else /* CONFIG_WLAN_QCA9377_DUAL_BDF */
-            memcpy(pfw_files, &FW_FILES_QCA6174_FW_3_0, sizeof(*pfw_files));
-#endif
             break;
     default:
             memcpy(pfw_files, &FW_FILES_DEFAULT, sizeof(*pfw_files));
