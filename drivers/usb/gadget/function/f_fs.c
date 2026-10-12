@@ -964,8 +964,10 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 
 		if (io_data->aio) {
 			req = usb_ep_alloc_request(ep->ep, GFP_ATOMIC);
-			if (unlikely(!req))
+			if (unlikely(!req)) {
+				ret = -ENOMEM;
 				goto error_lock;
+			}
 
 			req->buf      = data;
 			req->length   = data_len;
@@ -980,6 +982,7 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 
 			ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
 			if (unlikely(ret)) {
+				io_data->req = NULL;
 				usb_ep_free_request(ep->ep, req);
 				goto error_lock;
 			}
@@ -1118,6 +1121,26 @@ static int ffs_aio_cancel(struct kiocb *kiocb)
 	return value;
 }
 
+static ssize_t ffs_epfile_aio_io(struct kiocb *kiocb,
+			       struct ffs_io_data *io_data)
+{
+	ssize_t ret;
+
+	kiocb->private = io_data;
+	kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
+	ret = ffs_epfile_io(kiocb->ki_filp, io_data);
+	if (ret == -EIOCBQUEUED)
+		return ret;
+
+	/* Remove the request from the AIO cancellation list before freeing it. */
+	aio_complete(kiocb, ret, 0);
+	if (io_data->read)
+		kfree(io_data->iovec);
+	kfree(io_data);
+
+	return -EIOCBQUEUED;
+}
+
 static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
 				    const struct iovec *iovec,
 				    unsigned long nr_segs, loff_t loff)
@@ -1126,7 +1149,7 @@ static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
 
 	ENTER();
 
-	io_data = kmalloc(sizeof(*io_data), GFP_KERNEL);
+	io_data = kzalloc(sizeof(*io_data), GFP_KERNEL);
 	if (unlikely(!io_data))
 		return -ENOMEM;
 
@@ -1138,11 +1161,7 @@ static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
 	io_data->len = kiocb->ki_nbytes;
 	io_data->mm = current->mm;
 
-	kiocb->private = io_data;
-
-	kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
-
-	return ffs_epfile_io(kiocb->ki_filp, io_data);
+	return ffs_epfile_aio_io(kiocb, io_data);
 }
 
 static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
@@ -1160,7 +1179,7 @@ static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
 
 	memcpy(iovec_copy, iovec, sizeof(struct iovec)*nr_segs);
 
-	io_data = kmalloc(sizeof(*io_data), GFP_KERNEL);
+	io_data = kzalloc(sizeof(*io_data), GFP_KERNEL);
 	if (unlikely(!io_data)) {
 		kfree(iovec_copy);
 		return -ENOMEM;
@@ -1174,11 +1193,7 @@ static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
 	io_data->len = kiocb->ki_nbytes;
 	io_data->mm = current->mm;
 
-	kiocb->private = io_data;
-
-	kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
-
-	return ffs_epfile_io(kiocb->ki_filp, io_data);
+	return ffs_epfile_aio_io(kiocb, io_data);
 }
 
 static int
