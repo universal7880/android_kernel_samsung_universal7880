@@ -18,6 +18,10 @@
 	model = "Samsung A5Y17 LTE board based on Exynos 7880";
 	compatible = "samsung,exynos7880", "samsung,universal7880";
 
+	wlan {
+		qcom,legacy-bdf-max-hw-revision = <3>;
+	};
+
 	memory@40000000 {
 		device_type = "memory";
 		reg = <0x0 0x40000000 0x3E400000>;
