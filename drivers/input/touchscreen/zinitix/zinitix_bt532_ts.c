@@ -801,7 +801,7 @@ u32 BUTTON_MAPPING_KEY[MAX_SUPPORTED_BUTTON_NUM] = {
 #endif
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-struct bt532_ts_info *tui_tsp_info;
+static struct bt532_ts_info *tui_tsp_info;
 extern int tui_force_close(uint32_t arg);
 #endif
 
@@ -2540,7 +2540,12 @@ static void clear_report_data(struct bt532_ts_info *info)
 #define	PALM_REJECT_WIDTH	255
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-void trustedui_mode_on(void){
+bool zinitix_trustedui_active(void)
+{
+	return tui_tsp_info != NULL;
+}
+
+void zinitix_trustedui_mode_on(void){
 	input_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
 	clear_report_data(tui_tsp_info);
 	input_info(true, &tui_tsp_info->client->dev, "%s : esd timer disable", __func__);
@@ -2550,7 +2555,7 @@ void trustedui_mode_on(void){
 #endif
 }
 
-void trustedui_mode_off(void){
+void zinitix_trustedui_mode_off(void){
 	input_info(true, &tui_tsp_info->client->dev, "%s : esd timer enable", __func__);
 #if ESD_TIMER_INTERVAL
 	write_reg(tui_tsp_info->client, BT532_PERIODICAL_INTERRUPT_INTERVAL,
@@ -7895,6 +7900,10 @@ static int bt532_ts_remove(struct i2c_client *client)
 {
 	struct bt532_ts_info *info = i2c_get_clientdata(client);
 	struct bt532_ts_platform_data *pdata = info->pdata;
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	tui_tsp_info = NULL;
+#endif
 
 	disable_irq(info->irq);
 	down(&info->work_lock);

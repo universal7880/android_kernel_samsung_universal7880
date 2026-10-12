@@ -14,7 +14,7 @@
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 extern int tui_force_close(uint32_t arg);
-struct mms_ts_info *tui_tsp_info;
+static struct mms_ts_info *tui_tsp_info;
 #endif
 /**
  * Reboot chip
@@ -1423,7 +1423,7 @@ ERROR:
 }
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-void trustedui_mode_on(void){
+void melfas_trustedui_mode_on(void){
 	dev_err(&tui_tsp_info->client->dev, "%s, release all finger..\n",	__func__);
 	mms_clear_input(tui_tsp_info);
 }

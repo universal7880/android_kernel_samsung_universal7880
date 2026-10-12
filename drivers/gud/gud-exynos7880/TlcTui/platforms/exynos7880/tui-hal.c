@@ -399,13 +399,14 @@ uint32_t hal_tui_deactivate(void)
 	disable_irq(tsp_irq_num);
 
 #if defined(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX)
+	if (zinitix_trustedui_active()) {
 		tui_delay(5);
 		/*esd timer disable*/
-		trustedui_mode_on();
+		zinitix_trustedui_mode_on();
 		tui_delay(95);
-#else
-		tui_delay(1);
+	} else
 #endif
+		tui_delay(1);
 
 	pr_info(KERN_ERR "tsp_irq_num =%d\n",tsp_irq_num);
 
@@ -430,10 +431,12 @@ uint32_t hal_tui_deactivate(void)
 		release_i2c_clock();
 		
 #if defined(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX)
-		tui_delay(5);
-		/*esd timer enable*/
-		trustedui_mode_off();
-		tui_delay(95);
+		if (zinitix_trustedui_active()) {
+			tui_delay(5);
+			/*esd timer enable*/
+			zinitix_trustedui_mode_off();
+			tui_delay(95);
+		}
 #endif //defined(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX)
 
 		/* Clear linux TUI flag */
@@ -475,10 +478,12 @@ uint32_t hal_tui_activate(void)
 	release_i2c_clock();
 
 #if defined(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX)
-	tui_delay(5);
-	/*esd timer enable*/
-	trustedui_mode_off();
-	tui_delay(95);
+	if (zinitix_trustedui_active()) {
+		tui_delay(5);
+		/*esd timer enable*/
+		zinitix_trustedui_mode_off();
+		tui_delay(95);
+	}
 #endif
 
 	/* Clear linux TUI flag */
