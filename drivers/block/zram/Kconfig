@@ -25,6 +25,14 @@ config ZRAM_LZ4_COMPRESS
 	  This option enables LZ4 compression algorithm support. Compression
 	  algorithm can be changed using `comp_algorithm' device attribute.
 
+config ZRAM_LZ4_DEFAULT
+	bool "Use LZ4 as the default compression algorithm"
+	depends on ZRAM_LZ4_COMPRESS
+	default n
+	help
+	  Select LZ4 instead of LZO when initializing a zram device.
+	  The algorithm can still be changed with comp_algorithm before use.
+
 config ZRAM_DEBUG
 	bool "Compressed RAM block device debug support"
 	depends on ZRAM
