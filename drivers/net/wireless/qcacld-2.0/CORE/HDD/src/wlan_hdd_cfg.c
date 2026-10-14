@@ -5321,7 +5321,7 @@ config_exit:
 }
 
 #ifdef SEC_CONFIG_PSM
-#define SEC_PSM_FILEPATH		"/data/misc/conn/.psm.info"
+#define SEC_PSM_FILEPATH		"/data/vendor/conn/.psm.info"
 
 unsigned int wlan_hdd_sec_get_psm(unsigned int original_value)
 {
