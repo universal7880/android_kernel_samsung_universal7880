@@ -579,6 +579,10 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 		printk(KERN_INFO "[sec_input] PWR key is %s\n", !!state ? "pressed" : "released");
 		break;
 	case KEY_HOMEPAGE:
+#ifdef CONFIG_SOC_EXYNOS7880
+		input_report_key(input, KEY_WAKEUP, state > 0 ? 1 : 0);
+		input_sync(input);
+#endif
 		printk(KERN_INFO "[sec_input] HOME key is %s\n", !!state ? "pressed" : "released");
 		break;
 	case KEY_VOLUMEUP:
@@ -1073,6 +1077,10 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	}
 
 	device_init_wakeup(&pdev->dev, wakeup);
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	set_bit(KEY_WAKEUP, input->keybit);
+#endif
 
 	return 0;
 
