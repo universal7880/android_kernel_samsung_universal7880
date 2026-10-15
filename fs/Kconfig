@@ -97,6 +97,9 @@ menu "DOS/FAT/NT Filesystems"
 
 source "fs/fat/Kconfig"
 source "fs/sdfat/Kconfig"
+if SOC_EXYNOS7880
+source "fs/exfat/Kconfig"
+endif
 source "fs/ntfs/Kconfig"
 
 endmenu
