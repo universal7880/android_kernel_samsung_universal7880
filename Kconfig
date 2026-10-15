@@ -16,4 +16,8 @@ config ANDROID_MAJOR_VERSION
 	string
 	option env="ANDROID_MAJOR_VERSION"
 
+config SDCARDFS_VERSION
+	string
+	option env="SDCARDFS_VERSION"
+
 source "arch/$SRCARCH/Kconfig"

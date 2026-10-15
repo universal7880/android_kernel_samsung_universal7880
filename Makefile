@@ -489,6 +489,14 @@ else
 export ANDROID_VERSION=990000
 KBUILD_CFLAGS += -DANDROID_VERSION=990000
 endif
+# Keep the Android version intact while selecting a shipped sdcardfs tree.
+export SDCARDFS_VERSION := q
+ifneq ($(strip $(ANDROID_MAJOR_VERSION)),)
+ifneq ($(wildcard $(srctree)/fs/sdcardfs/$(ANDROID_MAJOR_VERSION)/Kconfig),)
+export SDCARDFS_VERSION := $(ANDROID_MAJOR_VERSION)
+endif
+endif
+
 PHONY += replace_dirs
 replace_dirs:
 ifneq ($(PLATFORM_VERSION), )
