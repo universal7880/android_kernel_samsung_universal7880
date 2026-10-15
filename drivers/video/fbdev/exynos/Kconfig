@@ -37,4 +37,8 @@ if SOC_EXYNOS7870
 source "drivers/video/fbdev/exynos/decon_7870/Kconfig"
 endif # SOC_EXYNOS7870
 
+if SOC_EXYNOS7880
+source "drivers/video/fbdev/exynos/decon_7880/Kconfig"
+endif # SOC_EXYNOS7880
+
 endif # EXYNOS_VIDEO

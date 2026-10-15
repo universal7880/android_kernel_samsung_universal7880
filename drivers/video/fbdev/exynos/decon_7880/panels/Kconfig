@@ -4,22 +4,22 @@ config EXYNOS_DECON7880_LCD
 
 config EXYNOS_DECON_LCD_SYSFS
 	depends on EXYNOS_DECON7880_LCD
-	tristate "Support LCD SYSFS"
+	bool "Support LCD SYSFS"
 	default y
 
 config PANEL_AID_DIMMING
 	depends on EXYNOS_DECON7880_LCD
-	tristate "Support AID Dimming"
+	bool "Support AID Dimming"
 	default n
 
 config EXYNOS_DECON_MDNIE_LITE
 	depends on EXYNOS_DECON7880_LCD
-	tristate "Support MDNIE LITE"
+	bool "Support MDNIE LITE"
 	default n
 
 config LCD_DOZE_MODE
 	depends on EXYNOS_DECON7880_LCD
-	tristate "Support DOZE MODE"
+	bool "Support DOZE MODE"
 	default n
 
 config LCD_HMT
@@ -29,7 +29,7 @@ config LCD_HMT
 
 config DISPLAY_USE_INFO
 	depends on EXYNOS_DECON7880_LCD
-	tristate "Support display use info logging"
+	bool "Support display use info logging"
 	default n
 
 config PANEL_S6E3FA3_A7Y17
