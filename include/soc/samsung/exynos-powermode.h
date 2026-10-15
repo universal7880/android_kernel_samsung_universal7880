@@ -15,6 +15,22 @@
 /**
  * System power down mode
  */
+#ifdef CONFIG_SOC_EXYNOS7880
+enum sys_powerdown {
+	SYS_SICD,
+	SYS_STOP,
+	SYS_LPD,
+	SYS_DSTOP,
+	NUM_SYS_POWERDOWN,
+	/* Below are all invalid modes for Exynos7880,
+	 * Kept just to avoid compilation errors */
+	SYS_SICD_CPD,
+	SYS_AFTR,
+	SYS_ALPA,
+	SYS_SLEEP,
+};
+
+#else
 enum sys_powerdown {
         SYS_SICD,
 #if !defined(CONFIG_SOC_EXYNOS7870)
@@ -32,8 +48,13 @@ enum sys_powerdown {
         SYS_SLEEP,
         NUM_SYS_POWERDOWN,
 };
+#endif
 
+#ifdef CONFIG_SOC_EXYNOS7880
+extern int exynos_prepare_sys_powerdown(enum sys_powerdown mode);
+#else
 extern void exynos_prepare_sys_powerdown(enum sys_powerdown mode);
+#endif
 extern void exynos_wakeup_sys_powerdown(enum sys_powerdown mode, bool early_wakeup);
 extern int determine_lpm(void);
 extern void exynos_prepare_cp_call(void);

@@ -23,6 +23,8 @@
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 
+void trustedui_set_tsp_irq(int irq_num);
+
 int trustedui_blank_inc(void);
 int trustedui_blank_dec(void);
 int trustedui_blank_get_counter(void);

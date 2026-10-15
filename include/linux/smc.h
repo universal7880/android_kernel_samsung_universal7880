@@ -117,7 +117,7 @@
 #elif defined(CONFIG_SOC_EXYNOS8890)
 #define UFS_FMP				(0x155A2000)
 #define EMMC0_FMP			(0x15561000)
-#elif defined(CONFIG_SOC_EXYNOS7870)
+#elif defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_SOC_EXYNOS7880)
 #define EMMC0_FMP			(0x13541000)
 #define EMMC2_FMP			(0x13561000)
 #endif

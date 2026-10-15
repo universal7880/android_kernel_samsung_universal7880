@@ -23,4 +23,11 @@ config EXYNOS7870_BTS
 	depends on SOC_EXYNOS7870
 	help
 	  Enable BTS (Bus traffic shaper) support
+config EXYNOS7880_BTS
+	bool "Bus traffic shaper support"
+	default y
+	depends on SOC_EXYNOS7880
+	help
+	  Enable BTS (Bus traffic shaper) support
+
 endif

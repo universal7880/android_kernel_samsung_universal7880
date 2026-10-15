@@ -92,6 +92,9 @@ enum gsc_ioctl_for_sync {
 enum vpp_sd_ioctl {
 	VPP_WIN_CONFIG,
 	VPP_STOP,
+#ifdef CONFIG_SOC_EXYNOS7880
+	VPP_TUI_PROTECT,
+#endif
 	VPP_GET_BTS_VAL,
 	VPP_SET_BW,
 	VPP_SET_ROT_MIF,
@@ -99,6 +102,9 @@ enum vpp_sd_ioctl {
 	VPP_DUMP,
 	VPP_WAIT_IDLE,
 	VPP_WAIT_FOR_FRAMEDONE,
+#ifdef CONFIG_SOC_EXYNOS7880
+	VPP_CFW_CONFIG,
+#endif
 };
 
 enum mdev_node {

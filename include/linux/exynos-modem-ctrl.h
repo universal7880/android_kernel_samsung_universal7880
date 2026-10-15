@@ -17,4 +17,9 @@
 extern int ss310ap_force_crash_exit_ext(void);
 #endif
 
+#ifdef CONFIG_SOC_EXYNOS7880
+extern int ss310ap_force_crash_exit_ext(void);
+extern u32 ss310ap_get_evs_mode_ext(void);
+#endif
+
 #endif
