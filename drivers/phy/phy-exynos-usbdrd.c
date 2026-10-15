@@ -491,6 +491,10 @@ static void exynos_usbdrd_set_hstune(struct exynos_usbdrd_phy *phy_drd,
 		switch (phy_drd->drv_data->cpu_type) {
 		case TYPE_EXYNOS7870:
 			hs_tune->tx_vref	= 0xE;
+#ifdef CONFIG_SOC_EXYNOS7880
+			hs_tune->tx_rise	= 0x3;
+			hs_tune->tx_pre_emp	= 0x2;
+#endif
 			hs_tune->tx_res		= 0x3;
 			hs_tune->rx_sqrx    = 0x6;
 			break;
