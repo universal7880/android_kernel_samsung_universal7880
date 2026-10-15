@@ -18,6 +18,10 @@
 
 #undef TSP_VERBOSE_DEBUG
 
+#if defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
+#endif
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
@@ -775,6 +779,11 @@ struct bt532_ts_info {
 	unsigned int dive_count;
 	unsigned int comm_err_count;	
 	bool dt2w_enable;
+#if defined(CONFIG_FB)
+	struct notifier_block fb_notif;
+	bool fb_notif_registered;
+#endif
+
 };
 /* Dummy touchkey code */
 #define KEY_DUMMY_HOME1	249
@@ -7542,6 +7551,11 @@ static int bt532_ts_probe_dt(struct device_node *np,
 }
 #endif
 
+#if defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data);
+#endif
+
 static int bt532_ts_probe(struct i2c_client *client,
 		const struct i2c_device_id *i2c_id)
 {
@@ -7815,6 +7829,14 @@ static int bt532_ts_probe(struct i2c_client *client,
 	tui_tsp_info = info;
 #endif
 
+#if defined(CONFIG_FB)
+	info->fb_notif.notifier_call = fb_notifier_callback;
+	if (fb_register_client(&info->fb_notif))
+		dev_err(&client->dev, "Failed to register display notifier\n");
+	else
+		info->fb_notif_registered = true;
+#endif
+
 	return 0;
 
 #ifdef SEC_FACTORY_TEST
@@ -7853,6 +7875,12 @@ static int bt532_ts_remove(struct i2c_client *client)
 {
 	struct bt532_ts_info *info = i2c_get_clientdata(client);
 	struct bt532_ts_platform_data *pdata = info->pdata;
+
+#if defined(CONFIG_FB)
+	if (info->fb_notif_registered)
+		fb_unregister_client(&info->fb_notif);
+#endif
+
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	tui_tsp_info = NULL;
@@ -7986,3 +8014,33 @@ module_exit(bt532_ts_exit);
 MODULE_DESCRIPTION("touch-screen device driver using i2c interface");
 MODULE_AUTHOR("<mika.kim@samsung.com>");
 MODULE_LICENSE("GPL");
+
+#if defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	struct bt532_ts_info *info = container_of(self, struct bt532_ts_info, fb_notif);
+	int blank;
+
+	if (event != FB_EVENT_BLANK || !evdata || !evdata->data)
+		return NOTIFY_DONE;
+
+	blank = *(int *)evdata->data;
+	switch (blank) {
+	case FB_BLANK_UNBLANK:
+	case FB_BLANK_NORMAL:
+	case FB_BLANK_VSYNC_SUSPEND:
+	case FB_BLANK_HSYNC_SUSPEND:
+		bt532_ts_open(info->input_dev);
+		break;
+	case FB_BLANK_POWERDOWN:
+		bt532_ts_close(info->input_dev);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+#endif
