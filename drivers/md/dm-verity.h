@@ -65,6 +65,9 @@ struct dm_verity {
 
 	struct dm_verity_fec *fec;	/* forward error correction */
 	unsigned long *validated_blocks; /* bitset blocks validated */
+#ifdef DMV_ALTA
+	u8 *verity_bitmap; /* bitmap for skipping verification on blocks */
+#endif
 };
 
 struct dm_verity_io {

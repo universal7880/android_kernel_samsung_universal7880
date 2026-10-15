@@ -56,7 +56,7 @@ config ARM64
 	select HAVE_FUNCTION_TRACER
 	select HAVE_FUNCTION_GRAPH_TRACER
 	select HAVE_GENERIC_DMA_COHERENT
-	select HAVE_HW_BREAKPOINT if PERF_EVENTS
+#	select HAVE_HW_BREAKPOINT if PERF_EVENTS
 	select HAVE_MEMBLOCK
 	select HAVE_PATA_PLATFORM
 	select HAVE_PERF_EVENTS
@@ -177,12 +177,22 @@ config KERNEL_MODE_NEON
 config FIX_EARLYCON_MEM
 	def_bool y
 
+config GENERIC_BUG
+	def_bool y
+	depends on BUG
+
 config PGTABLE_LEVELS
 	int
 	default 2 if ARM64_64K_PAGES && ARM64_VA_BITS_42
 	default 3 if ARM64_64K_PAGES && ARM64_VA_BITS_48
 	default 3 if ARM64_4K_PAGES && ARM64_VA_BITS_39
 	default 4 if ARM64_4K_PAGES && ARM64_VA_BITS_48
+
+config SEC_FACTORY
+	bool "Sec factory mode support"
+	default n
+	help
+	  It will support a sec factory mode
 
 source "init/Kconfig"
 
@@ -209,6 +219,83 @@ config ARCH_XGENE
 	bool "AppliedMicro X-Gene SOC Family"
 	help
 	  This enables support for AppliedMicro X-Gene SOC Family
+
+menu "Samsung Exynos"
+config ARCH_EXYNOS
+	bool
+
+config SOC_EXYNOS7870
+	bool "Samsung EXYNOS7870"
+	select ARCH_EXYNOS
+	select ARCH_HAS_CPUFREQ
+	select HAVE_S3C2410_I2C if I2C
+	select HAVE_S3C2410_WATCHDOG if WATCHDOG
+	select HAVE_S3C_RTC if RTC_CLASS
+	select ARCH_SUPPORTS_MSI
+	select ARM_AMBA
+	select CLKSRC_OF
+	select USE_OF
+	select COMMON_CLK_SAMSUNG
+	select CLKSRC_EXYNOS_MCT
+	select PINCTRL
+	select PM_GENERIC_DOMAINS if PM
+	select SOC_SAMSUNG
+	select SAMSUNG_DMADEV
+
+config ARCH_EXYNOS7
+	bool "SAMSUNG EXYNOS7"
+	select HAVE_ARM_SCU if SMP
+	select HAVE_SMP
+	help
+	  Samsung EXYNOS7 (A57/A53) SoC based systems
+
+config SOC_EXYNOS8890
+	bool "Samsung EXYNOS8890"
+	select ARCH_EXYNOS
+	select ARCH_HAS_CPUFREQ
+	select HAVE_S3C2410_I2C if I2C
+	select HAVE_S3C2410_WATCHDOG if WATCHDOG
+	select HAVE_S3C_RTC if RTC_CLASS
+	select ARCH_SUPPORTS_MSI
+	select ARM_AMBA
+	select CLKSRC_OF
+	select USE_OF
+	select COMMON_CLK_SAMSUNG
+	select CLKSRC_EXYNOS_MCT
+	select PINCTRL
+	select PWRCAL
+	select PM_GENERIC_DOMAINS if PM
+	select SOC_SAMSUNG
+	select SAMSUNG_DMADEV
+
+config SOC_EXYNOS8890_EVT1
+	default n
+	bool "Samsung EXYNOS8890 evt1"
+
+config ARCH_EXYNOS8
+	bool "SAMSUNG EXYNOS8"
+	select HAVE_ARM_SCU if SMP
+	select HAVE_SMP
+	help
+	  Samsung EXYNOS8 (Mongoose/A53) SoC based systems
+
+config PWRCAL
+    bool "Exynos Power Chip Abstraction Layer"
+    help
+    Support Power CAL for Exynos SoC.
+
+config ARM_TRUSTZONE
+	bool "Support TrustZone-enabled Trusted Execution Environment"
+	default y
+	help
+	  Select if you want a kernel to be executed at non-secure world.
+	  This option should be used with related secure bootloader and
+	  TrustZone software.
+
+	  If you don't know about TrustZone, say 'N'.
+endmenu
+
+source "arch/arm64/mach-exynos/Kconfig"
 
 endmenu
 
@@ -439,6 +526,103 @@ config SCHED_SMT
 	  MultiThreading at a cost of slightly increased overhead in some
 	  places. If unsure say N here.
 
+config DISABLE_CPU_SCHED_DOMAIN_BALANCE
+	bool "(EXPERIMENTAL) Disable CPU level scheduler load-balancing"
+	help
+	  Disables scheduler load-balancing at CPU sched domain level.
+
+config SCHED_HMP
+	bool "(EXPERIMENTAL) Heterogenous multiprocessor scheduling"
+	depends on DISABLE_CPU_SCHED_DOMAIN_BALANCE && SCHED_MC && FAIR_GROUP_SCHED && !SCHED_AUTOGROUP
+	help
+	  Experimental scheduler optimizations for heterogeneous platforms.
+	  Attempts to introspectively select task affinity to optimize power
+	  and performance. Basic support for multiple (>2) cpu types is in place,
+	  but it has only been tested with two types of cpus.
+	  There is currently no support for migration of task groups, hence
+	  !SCHED_AUTOGROUP. Furthermore, normal load-balancing must be disabled
+	  between cpus of different type (DISABLE_CPU_SCHED_DOMAIN_BALANCE).
+
+config SCHED_HMP_PRIO_FILTER
+	bool "(EXPERIMENTAL) Filter HMP migrations by task priority"
+	depends on SCHED_HMP
+	help
+	  Enables task priority based HMP migration filter. Any task with
+	  a NICE value above the threshold will always be on low-power cpus
+	  with less compute capacity.
+
+config SCHED_HMP_PRIO_FILTER_VAL
+	int "NICE priority threshold"
+	default 5
+	depends on SCHED_HMP_PRIO_FILTER
+
+config HMP_FAST_CPU_MASK
+	string "HMP scheduler fast CPU mask"
+	depends on SCHED_HMP
+	help
+          Leave empty to use device tree information.
+	  Specify the cpuids of the fast CPUs in the system as a list string,
+	  e.g. cpuid 0+1 should be specified as 0-1.
+
+config HMP_SLOW_CPU_MASK
+	string "HMP scheduler slow CPU mask"
+	depends on SCHED_HMP
+	help
+	  Leave empty to use device tree information.
+	  Specify the cpuids of the slow CPUs in the system as a list string,
+	  e.g. cpuid 0+1 should be specified as 0-1.
+
+config HMP_VARIABLE_SCALE
+	bool "Allows changing the load tracking scale through sysfs"
+	depends on SCHED_HMP
+	help
+	  When turned on, this option exports the thresholds and load average
+	  period value for the load tracking patches through sysfs.
+	  The values can be modified to change the rate of load accumulation
+	  and the thresholds used for HMP migration.
+	  The load_avg_period_ms is the time in ms to reach a load average of
+	  0.5 for an idle task of 0 load average ratio that start a busy loop.
+	  The up_threshold and down_threshold is the value to go to a faster
+	  CPU or to go back to a slower cpu.
+	  The {up,down}_threshold are devided by 1024 before being compared
+	  to the load average.
+	  For examples, with load_avg_period_ms = 128 and up_threshold = 512,
+	  a running task with a load of 0 will be migrated to a bigger CPU after
+	  128ms, because after 128ms its load_avg_ratio is 0.5 and the real
+	  up_threshold is 0.5.
+	  This patch has the same behavior as changing the Y of the load
+	  average computation to
+	        (1002/1024)^(LOAD_AVG_PERIOD/load_avg_period_ms)
+	  but it remove intermadiate overflows in computation.
+
+config HMP_FREQUENCY_INVARIANT_SCALE
+	bool "(EXPERIMENTAL) Frequency-Invariant Tracked Load for HMP"
+	depends on HMP_VARIABLE_SCALE && CPU_FREQ
+	default y
+	help
+	  Scales the current load contribution in line with the frequency
+	  of the CPU that the task was executed on.
+	  In this version, we use a simple linear scale derived from the
+	  maximum frequency reported by CPUFreq.
+	  Restricting tracked load to be scaled by the CPU's frequency
+	  represents the consumption of possible compute capacity
+	  (rather than consumption of actual instantaneous capacity as
+	  normal) and allows the HMP migration's simple threshold
+	  migration strategy to interact more predictably with CPUFreq's
+	  asynchronous compute capacity changes.
+
+config SCHED_HMP_LITTLE_PACKING
+	bool "Small task packing for HMP"
+	depends on SCHED_HMP
+	default n
+	help
+	  Allows the HMP Scheduler to pack small tasks into CPUs in the
+	  smallest HMP domain.
+	  Controlled by two sysfs files in sys/kernel/hmp.
+	  packing_enable: 1 to enable, 0 to disable packing. Default 1.
+	  packing_limit: runqueue load ratio where a RQ is considered
+	    to be full. Default is NICE_0_LOAD * 9/8.
+
 config NR_CPUS
 	int "Maximum number of CPUs (2-64)"
 	# These have to remain sorted largest to smallest
@@ -528,7 +712,7 @@ config FORCE_MAX_ZONEORDER
 
 config UNMAP_KERNEL_AT_EL0
 	bool "Unmap kernel when running in userspace (aka \"KAISER\")" if EXPERT
-	default y
+	default n
 	help
 	  Speculation attacks against some high-performance processors can
 	  be used to bypass MMU permission checks and leak kernel data to
@@ -710,6 +894,52 @@ config EFI
           clock, and platform reset). A UEFI stub is also provided to
 	  allow the kernel to be booted as an EFI application. This
 	  is only useful on systems that have UEFI firmware.
+
+config TIMA
+	bool "Enable TIMA(Trustzone based Integrity Measurement Archtecture feature"
+	default n
+
+config TIMA_LKMAUTH
+	bool "Enable LKM authentication by TIMA"
+	help
+	  TIMA authenticates loaded kernel modules. Disable it if you don't
+	  want TIMA enabled.
+
+config TIMA_RKP
+	bool "Enable RKP (Realtime Kernel Protection) TIMA feature"
+	depends on TIMA
+	select UH_RKP
+	default n
+
+config UH_RKP
+	bool "Enable RKP (Realtime Kernel Protection) UH feature"
+	help
+	  it protects a kernel text and etc.
+
+config TIMA_RKP_4G
+	bool "Support 4G model"
+	depends on TIMA_RKP
+	default n
+
+config RKP_KDP
+	bool "Protection for cred structure"
+	depends on TIMA_RKP
+	default n
+	help
+		Prevents unauthorized cred modification.
+
+config RKP_DMAP_PROT
+	bool "Page Double Mapping protection"
+	depends on (TIMA_RKP && RKP_KDP)
+	default n
+	help
+		Prevents unauthorized cred modification.
+
+config TIMA_TEST_INFRA
+	tristate "Testing infrastructure for TIMA"
+	default n
+	help
+	  Kernel bits of the TIMA test infrastructure
 
 config BUILD_ARM64_APPENDED_DTB_IMAGE
 	bool "Build a concatenated Image.gz/dtb by default"

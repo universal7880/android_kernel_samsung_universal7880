@@ -3505,10 +3505,10 @@ retry:
 		goto out;
 	switch (mode & S_IFMT) {
 		case 0: case S_IFREG:
-			error = vfs_create2(path.mnt, path.dentry->d_inode,dentry,mode,true);
+			error = vfs_create2(path.mnt, path.dentry->d_inode, dentry, mode, true);
 			break;
 		case S_IFCHR: case S_IFBLK:
-			error = vfs_mknod2(path.mnt, path.dentry->d_inode,dentry,mode,
+			error = vfs_mknod2(path.mnt, path.dentry->d_inode, dentry, mode,
 					new_decode_dev(dev));
 			break;
 		case S_IFIFO: case S_IFSOCK:
@@ -3668,6 +3668,10 @@ static long do_rmdir(int dfd, const char __user *pathname)
 	struct dentry *dentry;
 	struct nameidata nd;
 	unsigned int lookup_flags = 0;
+#if ANDROID_VERSION < 80000
+	char *path_buf = NULL;
+	char *propagate_path = NULL;
+#endif
 retry:
 	name = user_path_parent(dfd, pathname, &nd, lookup_flags);
 	if (IS_ERR(name))
@@ -3702,11 +3706,31 @@ retry:
 	error = security_path_rmdir(&nd.path, dentry);
 	if (error)
 		goto exit3;
+#if ANDROID_VERSION < 80000
+	if (nd.path.dentry->d_sb->s_op->unlink_callback) {
+		path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+		propagate_path = dentry_path_raw(dentry, path_buf, PATH_MAX);
+	}
+#endif
 	error = vfs_rmdir2(nd.path.mnt, nd.path.dentry->d_inode, dentry);
+#ifdef CONFIG_PROC_DLOG
+	if (!error)
+		dlog_hook_rmdir(dentry, &nd.path);
+#endif
 exit3:
 	dput(dentry);
 exit2:
 	mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+#if ANDROID_VERSION < 80000
+	if (path_buf && !error) {
+		nd.path.dentry->d_sb->s_op->unlink_callback(nd.path.dentry->d_sb,
+			propagate_path);
+	}
+	if (path_buf) {
+		kfree(path_buf);
+		path_buf = NULL;
+	}
+#endif
 	mnt_drop_write(nd.path.mnt);
 exit1:
 	path_put(&nd.path);
@@ -3802,6 +3826,10 @@ static long do_unlinkat(int dfd, const char __user *pathname)
 	struct inode *inode = NULL;
 	struct inode *delegated_inode = NULL;
 	unsigned int lookup_flags = 0;
+#if ANDROID_VERSION < 80000
+	char *path_buf = NULL;
+	char *propagate_path = NULL;
+#endif
 retry:
 	name = user_path_parent(dfd, pathname, &nd, lookup_flags);
 	if (IS_ERR(name))
@@ -3826,15 +3854,34 @@ retry_deleg:
 		inode = dentry->d_inode;
 		if (d_is_negative(dentry))
 			goto slashes;
+#if ANDROID_VERSION < 80000
+		if (inode->i_sb->s_op->unlink_callback) {
+			path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+			propagate_path = dentry_path_raw(dentry, path_buf, PATH_MAX);
+		}
+#endif
 		ihold(inode);
 		error = security_path_unlink(&nd.path, dentry);
 		if (error)
 			goto exit2;
 		error = vfs_unlink2(nd.path.mnt, nd.path.dentry->d_inode, dentry, &delegated_inode);
+#ifdef CONFIG_PROC_DLOG
+		if (!error)
+			dlog_hook(dentry, inode, &nd.path);
+#endif
 exit2:
 		dput(dentry);
 	}
 	mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+#if ANDROID_VERSION < 80000
+	if (path_buf && !error) {
+		inode->i_sb->s_op->unlink_callback(inode->i_sb, propagate_path);
+	}
+	if (path_buf) {
+		kfree(path_buf);
+		path_buf = NULL;
+	}
+#endif
 	if (inode)
 		iput(inode);	/* truncate the inode here */
 	inode = NULL;
@@ -3962,7 +4009,9 @@ SYSCALL_DEFINE2(symlink, const char __user *, oldname, const char __user *, newn
  * be appropriate for callers that expect the underlying filesystem not
  * to be NFS exported.
  */
-int vfs_link2(struct vfsmount *mnt, struct dentry *old_dentry, struct inode *dir, struct dentry *new_dentry, struct inode **delegated_inode)
+int vfs_link2(struct vfsmount *mnt, struct dentry *old_dentry,
+		struct inode *dir, struct dentry *new_dentry,
+		struct inode **delegated_inode)
 {
 	struct inode *inode = old_dentry->d_inode;
 	unsigned max_links = dir->i_sb->s_max_links;

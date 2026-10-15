@@ -62,7 +62,7 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 		si->nr_flushed =
 			atomic_read(&SM_I(sbi)->fcc_info->issued_flush);
 		si->nr_flushing =
-			atomic_read(&SM_I(sbi)->fcc_info->queued_flush);
+			atomic_read(&SM_I(sbi)->fcc_info->issing_flush);
 		si->flush_list_empty =
 			llist_empty(&SM_I(sbi)->fcc_info->issue_list);
 	}
@@ -70,7 +70,7 @@ static void update_general_status(struct f2fs_sb_info *sbi)
 		si->nr_discarded =
 			atomic_read(&SM_I(sbi)->dcc_info->issued_discard);
 		si->nr_discarding =
-			atomic_read(&SM_I(sbi)->dcc_info->queued_discard);
+			atomic_read(&SM_I(sbi)->dcc_info->issing_discard);
 		si->nr_discard_cmd =
 			atomic_read(&SM_I(sbi)->dcc_info->discard_cmd_cnt);
 		si->undiscard_blks = SM_I(sbi)->dcc_info->undiscard_blks;
@@ -175,6 +175,7 @@ static void update_sit_info(struct f2fs_sb_info *sbi)
 static void update_mem_info(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_stat_info *si = F2FS_STAT(sbi);
+	unsigned npages;
 	int i;
 
 	if (si->base_mem)
@@ -198,7 +199,7 @@ static void update_mem_info(struct f2fs_sb_info *sbi)
 	si->base_mem += 2 * SIT_VBLOCK_MAP_SIZE * MAIN_SEGS(sbi);
 	si->base_mem += SIT_VBLOCK_MAP_SIZE * MAIN_SEGS(sbi);
 	si->base_mem += SIT_VBLOCK_MAP_SIZE;
-	if (__is_large_section(sbi))
+	if (sbi->segs_per_sec > 1)
 		si->base_mem += MAIN_SECS(sbi) * sizeof(struct sec_entry);
 	si->base_mem += __bitmap_size(sbi, SIT_BITMAP);
 
@@ -258,11 +259,11 @@ get_cache:
 
 	si->page_mem = 0;
 	if (sbi->node_inode) {
-		unsigned npages = NODE_MAPPING(sbi)->nrpages;
+		npages = NODE_MAPPING(sbi)->nrpages;
 		si->page_mem += (unsigned long long)npages << PAGE_SHIFT;
 	}
 	if (sbi->meta_inode) {
-		unsigned npages = META_MAPPING(sbi)->nrpages;
+		npages = META_MAPPING(sbi)->nrpages;
 		si->page_mem += (unsigned long long)npages << PAGE_SHIFT;
 	}
 }
@@ -509,6 +510,13 @@ int f2fs_build_stats(struct f2fs_sb_info *sbi)
 	return 0;
 }
 
+void f2fs_update_sec_stats(struct f2fs_sb_info *sbi)
+{
+	update_general_status(sbi);
+	update_sit_info(sbi);
+	update_mem_info(sbi);
+}
+
 void f2fs_destroy_stats(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_stat_info *si = F2FS_STAT(sbi);
@@ -517,19 +525,33 @@ void f2fs_destroy_stats(struct f2fs_sb_info *sbi)
 	list_del(&si->stat_list);
 	mutex_unlock(&f2fs_stat_mutex);
 
-	kvfree(si);
+	kfree(si);
 }
 
-void __init f2fs_create_root_stats(void)
+int __init f2fs_create_root_stats(void)
 {
-	f2fs_debugfs_root = debugfs_create_dir("f2fs", NULL);
+	struct dentry *file;
 
-	debugfs_create_file("status", S_IRUGO, f2fs_debugfs_root, NULL,
-			    &stat_fops);
+	f2fs_debugfs_root = debugfs_create_dir("f2fs", NULL);
+	if (!f2fs_debugfs_root)
+		return -ENOMEM;
+
+	file = debugfs_create_file("status", S_IRUGO, f2fs_debugfs_root,
+			NULL, &stat_fops);
+	if (!file) {
+		debugfs_remove(f2fs_debugfs_root);
+		f2fs_debugfs_root = NULL;
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 void f2fs_destroy_root_stats(void)
 {
+	if (!f2fs_debugfs_root)
+		return;
+
 	debugfs_remove_recursive(f2fs_debugfs_root);
 	f2fs_debugfs_root = NULL;
 }

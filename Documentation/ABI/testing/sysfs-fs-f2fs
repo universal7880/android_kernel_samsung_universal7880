@@ -51,6 +51,12 @@ Description:
 		 Controls the dirty page count condition for the in-place-update
 		 policies.
 
+What:		/sys/fs/f2fs/<disk>/min_ssr_sections
+Date:		October 2017
+Contact:	"Chao Yu" <yuchao0@huawei.com>
+Description:
+		 Controls the fee section threshold to trigger SSR allocation.
+
 What:		/sys/fs/f2fs/<disk>/min_seq_blocks
 Date:		August 2018
 Contact:	"Jaegeuk Kim" <jaegeuk@kernel.org>
@@ -64,12 +70,6 @@ Date:		March 2017
 Contact:	"Jaegeuk Kim" <jaegeuk@kernel.org>
 Description:
 		 Controls the dirty page count condition for redefining hot data.
-
-What:		/sys/fs/f2fs/<disk>/min_ssr_sections
-Date:		October 2017
-Contact:	"Chao Yu" <yuchao0@huawei.com>
-Description:
-		 Controls the fee section threshold to trigger SSR allocation.
 
 What:		/sys/fs/f2fs/<disk>/max_small_discards
 Date:		November 2013

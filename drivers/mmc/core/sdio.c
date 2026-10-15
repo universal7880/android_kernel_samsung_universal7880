@@ -33,6 +33,10 @@
 #include <linux/mmc/sdio_ids.h>
 #endif
 
+#ifdef CONFIG_QCOM_WIFI
+#define MANUAL_BUS_TUNING 1
+#endif /* CONFIG_QCOM_WIFI */
+
 static int sdio_read_fbr(struct sdio_func *func)
 {
 	int ret;
@@ -193,7 +197,11 @@ static int sdio_read_cccr(struct mmc_card *card, u32 ocr)
 		if (!card->sw_caps.sd3_bus_mode) {
 			if (speed & SDIO_SPEED_SHS) {
 				card->cccr.high_speed = 1;
+#ifndef CONFIG_MMC_SEC_QUIRK_CLOCK_SETTING
 				card->sw_caps.hs_max_dtr = 50000000;
+#else
+				card->sw_caps.hs_max_dtr = 51000000;
+#endif
 			} else {
 				card->cccr.high_speed = 0;
 				card->sw_caps.hs_max_dtr = 25000000;
@@ -375,7 +383,11 @@ static unsigned mmc_sdio_get_max_clock(struct mmc_card *card)
 		 * high-speed, but it seems that 50 MHz is
 		 * mandatory.
 		 */
+#ifndef CONFIG_MMC_SEC_QUIRK_CLOCK_SETTING
 		max_dtr = 50000000;
+#else
+		max_dtr = 51000000;
+#endif
 	} else {
 		max_dtr = card->cis.max_dtr;
 	}
@@ -525,6 +537,53 @@ static int sdio_set_bus_speed_mode(struct mmc_card *card)
 	if (err)
 		return err;
 
+#ifdef CONFIG_QCOM_WIFI
+	if (MANUAL_BUS_TUNING && (!strcmp("mmc1", mmc_hostname(card->host)))) {
+		unsigned char temp;
+		/* start of custom drive strength tuning */		
+		err = mmc_io_rw_direct(card, 0, 0, 0x15, 0, &temp);
+		if (err) {
+			pr_err("%s: drive strength reading error %d\n",
+					mmc_hostname(card->host), err);
+		}
+		temp = (temp & (~(SDIO_DRIVE_DTSx_MASK << SDIO_DRIVE_DTSx_SHIFT))) | SDIO_DTSx_SET_TYPE_D;
+		err = mmc_io_rw_direct(card, 1, 0, 0x15, temp, NULL);
+		if (err) {
+			pr_err("%s: drive strength setting error %d\n",
+					mmc_hostname(card->host), err);
+		}
+		/* start of custom bus tuning */
+		err = mmc_io_rw_direct(card, 1, 0, 0xF2, 0x0F, NULL);
+		if (err) {
+			pr_err("%s: custom bus tuning error %d\n",
+					mmc_hostname(card->host), err);
+		}
+		err = mmc_io_rw_direct(card, 0, 0, 0xF1, 0, &temp);
+		if (err) {
+			pr_err("%s: drive strength reading error %d\n",
+					mmc_hostname(card->host), err);
+		}
+		temp |= 0x80;
+		err = mmc_io_rw_direct(card, 1, 0, 0xF1, temp, NULL);
+		if (err) {
+			pr_err("%s: drive strength setting error %d\n",
+					mmc_hostname(card->host), err);
+		}
+
+		/* Set F0 */
+		err = mmc_io_rw_direct(card, 0, 0, 0xF0, 0, &temp);
+		if (err) {
+			pr_err("%s: F0 reading error %d\n",
+					mmc_hostname(card->host), err);
+		}
+		temp |= 0x20;
+		err = mmc_io_rw_direct(card, 1, 0, 0xF0, temp, NULL);
+		if (err) {
+			pr_err("%s: F0 setting error %d\n",
+					mmc_hostname(card->host), err);
+		}
+	}
+#endif /* CONFIG_QCOM_WIFI */
 	speed &= ~SDIO_SPEED_BSS_MASK;
 	speed |= bus_speed;
 	err = mmc_io_rw_direct(card, 1, 0, SDIO_CCCR_SPEED, speed, NULL);
@@ -992,7 +1051,7 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	}
 
 	/* No need to reinitialize powered-resumed nonremovable cards */
-	if (mmc_card_is_removable(host) || !mmc_card_keep_power(host)) {
+	if ((mmc_card_is_removable(host) || !mmc_card_keep_power(host)) && (strcmp("mmc1", mmc_hostname(host)))) {
 		sdio_reset(host);
 		mmc_go_idle(host);
 		err = mmc_sdio_init_card(host, host->card->ocr, host->card,
@@ -1212,6 +1271,16 @@ int mmc_attach_sdio(struct mmc_host *host)
 			goto remove_added;
 	}
 
+	#if defined(CONFIG_BCM4343) || defined(CONFIG_BCM43454) || \
+		defined(CONFIG_BCM43455) || defined(CONFIG_BCM43456)
+		if(!strcmp("mmc1", mmc_hostname(host))) {
+		printk("%s, Set Nonremovable flag\n",mmc_hostname(host));
+		host->caps |= MMC_CAP_NONREMOVABLE;
+		}
+	#endif /* CONFIG_BCM4343 || CONFIG_BCM43454 || \
+		  CONFIG_BCM43455 || CONFIG_BCM43456 */
+
+
 	mmc_claim_host(host);
 	return 0;
 
@@ -1237,6 +1306,51 @@ err:
 
 int sdio_reset_comm(struct mmc_card *card)
 {
+#if defined(CONFIG_BCM4343) || defined(CONFIG_BCM43454) || \
+	defined(CONFIG_BCM43455) || defined(CONFIG_BCM43456)
+	struct mmc_host *host = card->host;
+	u32 ocr;
+	u32 rocr;
+	int err;
+
+	printk("%s():\n", __func__);
+	mmc_claim_host(host);
+	
+	mmc_set_timing(host, MMC_TIMING_LEGACY);
+	mmc_set_clock(host, host->f_init);
+
+	sdio_reset(host);
+	mmc_go_idle(host);
+
+	mmc_send_if_cond(host, host->ocr_avail);
+	
+	err = mmc_send_io_op_cond(host, 0, &ocr);
+	if (err)
+		goto err;
+	
+	if (host->ocr_avail_sdio)
+		host->ocr_avail = host->ocr_avail_sdio;
+
+
+	rocr = mmc_select_voltage(host, ocr & ~0x7F);
+	if (!rocr) {
+		err = -EINVAL;
+		printk("%s(): voltage err\n", __func__);
+		goto err;
+	}
+	
+	err = mmc_sdio_init_card(host, rocr, card, 0);
+	if (err)
+		goto err;
+
+	mmc_release_host(host);
+	return 0;
+err:
+	printk("%s: Error resetting SDIO communications (%d)\n",
+	       mmc_hostname(host), err);
+	mmc_release_host(host);
+	return err;
+#else
 	struct mmc_host *host = card->host;
 	u32 ocr;
 	u32 rocr;
@@ -1270,5 +1384,7 @@ err:
 	       mmc_hostname(host), err);
 	mmc_release_host(host);
 	return err;
+#endif /* CONFIG_BCM4343 || CONFIG_BCM43454 || \
+	  CONFIG_BCM43455 || CONFIG_BCM43456 */
 }
 EXPORT_SYMBOL(sdio_reset_comm);

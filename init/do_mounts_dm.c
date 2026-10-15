@@ -395,6 +395,7 @@ static void __init dm_setup_drive(void)
 	printk(KERN_INFO "dm: dm-%d is ready\n", dm_setup_args.minor);
 
 	dm_unlock_md_type(md);
+	if(table) kfree(table);
 	dm_setup_cleanup();
 	return;
 
@@ -405,6 +406,7 @@ suspend_fail:
 setup_md_queue_fail:
 table_complete_fail:
 add_target_fail:
+	if(table) kfree(table);
 	dm_unlock_md_type(md);
 dm_table_create_fail:
 	dm_put(md);

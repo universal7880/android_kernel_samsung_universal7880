@@ -34,6 +34,10 @@
 #include <linux/prefetch.h>
 #include <linux/memcontrol.h>
 
+#ifdef CONFIG_SEC_DEBUG_AUTO_SUMMARY
+#include <linux/sec_debug.h>
+#endif
+
 #include <trace/events/kmem.h>
 
 #include "internal.h"
@@ -563,8 +567,9 @@ static void print_track(const char *s, struct track *t)
 	if (!t->addr)
 		return;
 
-	pr_err("INFO: %s in %pS age=%lu cpu=%u pid=%d\n",
+	pr_auto(ASL7, "INFO: %s in %pS age=%lu cpu=%u pid=%d\n",
 	       s, (void *)t->addr, jiffies - t->when, t->cpu, t->pid);
+
 #ifdef CONFIG_STACKTRACE
 	{
 		int i;
@@ -601,9 +606,10 @@ static void slab_bug(struct kmem_cache *s, char *fmt, ...)
 	va_start(args, fmt);
 	vaf.fmt = fmt;
 	vaf.va = &args;
-	pr_err("=============================================================================\n");
-	pr_err("BUG %s (%s): %pV\n", s->name, print_tainted(), &vaf);
-	pr_err("-----------------------------------------------------------------------------\n\n");
+
+	pr_auto(ASL7, "=============================================================================\n");
+	pr_auto(ASL7, "BUG %s (%s): %pV\n", s->name, print_tainted(), &vaf);
+	pr_auto(ASL7, "-----------------------------------------------------------------------------\n\n");
 
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
 	va_end(args);
@@ -630,7 +636,7 @@ static void print_trailer(struct kmem_cache *s, struct page *page, u8 *p)
 
 	print_page_info(page);
 
-	pr_err("INFO: Object 0x%p @offset=%tu fp=0x%p\n\n",
+	pr_auto(ASL7, "INFO: Object 0x%p @offset=%tu fp=0x%p\n",
 	       p, p - addr, get_freepointer(s, p));
 
 	if (s->flags & SLAB_RED_ZONE)
@@ -662,11 +668,35 @@ static void print_trailer(struct kmem_cache *s, struct page *page, u8 *p)
 static void object_err(struct kmem_cache *s, struct page *page,
 			u8 *object, char *reason)
 {
+	pr_auto_once(7);
 	slab_bug(s, "%s", reason);
 	print_trailer(s, page, object);
+	pr_auto_disable(7);
+
+	if (slub_debug)
+		panic("SLUB ERROR: object_err");
 }
 
 static __printf(3, 4) void slab_err(struct kmem_cache *s, struct page *page,
+			const char *fmt, ...)
+{
+	va_list args;
+	char buf[100];
+
+	pr_auto_once(7);
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+	slab_bug(s, "%s", buf);
+	print_page_info(page);
+	dump_stack();
+	pr_auto_disable(7);
+
+	if (slub_debug)
+		panic("SLUB ERROR: slab_err");
+}
+
+static void slab_err_nopanic(struct kmem_cache *s, struct page *page,
 			const char *fmt, ...)
 {
 	va_list args;
@@ -718,10 +748,17 @@ static int check_bytes_and_report(struct kmem_cache *s, struct page *page,
 	while (end > fault && end[-1] == value)
 		end--;
 
+	pr_auto_once(7);
 	slab_bug(s, "%s overwritten", what);
-	pr_err("INFO: 0x%p-0x%p. First byte 0x%x instead of 0x%x\n",
+
+	pr_auto(ASL7, "INFO: 0x%p-0x%p. First byte 0x%x instead of 0x%x\n",
 					fault, end - 1, fault[0], value);
+
 	print_trailer(s, page, object);
+	pr_auto_disable(7);
+
+	if (slub_debug)
+		panic("SLUB ERROR: check_bytes_and_report. Can it be restored?");
 
 	restore_bytes(s, what, value, fault, end);
 	return 0;
@@ -809,8 +846,11 @@ static int slab_pad_check(struct kmem_cache *s, struct page *page)
 	while (end > fault && end[-1] == POISON_INUSE)
 		end--;
 
-	slab_err(s, page, "Padding overwritten. 0x%p-0x%p", fault, end - 1);
+	slab_err_nopanic(s, page, "Padding overwritten. 0x%p-0x%p", fault, end - 1);
 	print_section("Padding ", end - remainder, remainder);
+
+	if (slub_debug)
+		panic("SLUB ERROR: slab_pad_check. Can it be restored?");
 
 	restore_bytes(s, "slab padding", POISON_INUSE, end - remainder, end);
 	return 0;
@@ -1211,8 +1251,16 @@ unsigned long kmem_cache_flags(unsigned long object_size,
 	 * Enable debugging if selected on the kernel commandline.
 	 */
 	if (slub_debug && (!slub_debug_slabs || (name &&
-		!strncmp(slub_debug_slabs, name, strlen(slub_debug_slabs)))))
+		!strncmp(slub_debug_slabs, name, strlen(slub_debug_slabs))))) {
 		flags |= slub_debug;
+
+		if (name && 
+			(!strncmp(name, "zspage", strlen("zspage")) ||
+			!strncmp(name, "zs_handle", strlen("zs_handle")) ||
+			!strncmp(name, "zswap_entry", strlen("zswap_entry")) ||
+			!strncmp(name, "avtab_node", strlen("avtab_node"))))
+			flags &= ~SLAB_STORE_USER;
+	}
 
 	return flags;
 }
@@ -3185,7 +3233,7 @@ static void list_slab_objects(struct kmem_cache *s, struct page *page,
 				     sizeof(long), GFP_ATOMIC);
 	if (!map)
 		return;
-	slab_err(s, page, text, s->name);
+	slab_err_nopanic(s, page, text, s->name);
 	slab_lock(page);
 
 	get_map(s, page, map);
@@ -3196,6 +3244,10 @@ static void list_slab_objects(struct kmem_cache *s, struct page *page,
 			print_tracking(s, p);
 		}
 	}
+	
+	if (slub_debug)
+		panic("SLUB ERROR: list_slab_objects.");
+
 	slab_unlock(page);
 	kfree(map);
 #endif
