@@ -32,6 +32,10 @@
 #endif
 
 #include "dma.h"
+#ifdef CONFIG_SOC_EXYNOS7880
+#include "lpass.h"
+#endif
+
 #ifdef CONFIG_SND_SAMSUNG_SEIREN_DMA
 #include "seiren/seiren-dma.h"
 #endif
@@ -40,7 +44,11 @@
 #define ST_RUNNING		(1<<0)
 #define ST_OPENED		(1<<1)
 
+#ifdef CONFIG_SOC_EXYNOS7880
+#define SRAM_END		(0x03002000)
+#else
 #define SRAM_END		(0x04000000)
+#endif
 #define RX_SRAM_SIZE		(0x2000)	/* 8 KB */
 #define MAX_DEEPBUF_SIZE	(0xA000)	/* 40 KB */
 
@@ -106,6 +114,18 @@ int check_adma_status(void)
 {
 	return atomic_read(&dram_usage_cnt) ? 1 : 0;
 }
+
+#ifdef CONFIG_SOC_EXYNOS7880
+void inc_dram_usage_count(void)
+{
+	atomic_inc(&dram_usage_cnt);
+}
+
+void dec_dram_usage_count(void)
+{
+	atomic_dec(&dram_usage_cnt);
+}
+#endif
 
 /* dma_enqueue
  *
@@ -359,16 +379,36 @@ static int dma_trigger(struct snd_pcm_substream *substream, int cmd)
 		prtd->state |= ST_RUNNING;
 		lpass_dma_enable(true);
 		prtd->params->ops->trigger(prtd->params->ch);
+#ifdef CONFIG_SOC_EXYNOS7880
+		if ((substream->stream == SNDRV_PCM_STREAM_PLAYBACK) ||
+			(prtd->dram_used)) {
+			inc_dram_usage_count();
+			lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
+		} else {
+			lpass_update_lpclock(LPCLK_CTRLID_RECORD, true);
+		}
+#else
 		if (prtd->dram_used)
 			atomic_inc(&dram_usage_cnt);
+#endif
 		break;
 
 	case SNDRV_PCM_TRIGGER_STOP:
 		prtd->state &= ~ST_RUNNING;
 		prtd->params->ops->stop(prtd->params->ch);
 		lpass_dma_enable(false);
+#ifdef CONFIG_SOC_EXYNOS7880
+		if ((substream->stream == SNDRV_PCM_STREAM_PLAYBACK) ||
+			(prtd->dram_used)) {
+			dec_dram_usage_count();
+			lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
+		} else {
+			lpass_update_lpclock(LPCLK_CTRLID_RECORD, false);
+		}
+#else
 		if (prtd->dram_used)
 			atomic_dec(&dram_usage_cnt);
+#endif
 		break;
 
 	default:
@@ -503,7 +543,7 @@ static int preallocate_dma_buffer(struct snd_pcm *pcm, int stream)
 	return 0;
 }
 
-#ifndef CONFIG_SOC_EXYNOS7870
+#if !defined(CONFIG_SOC_EXYNOS7870) && !defined(CONFIG_SOC_EXYNOS7880)
 static const char *dma_prop_addr[2] = {
 	[SNDRV_PCM_STREAM_PLAYBACK] = "samsung,tx-buf",
 	[SNDRV_PCM_STREAM_CAPTURE]  = "samsung,rx-buf"
@@ -524,7 +564,7 @@ static int preallocate_dma_buffer_of(struct snd_pcm *pcm, int stream,
 	struct snd_pcm_substream *substream = pcm->streams[stream].substream;
 	struct snd_dma_buffer *buf = &substream->dma_buffer;
 	size_t size;
-#ifndef CONFIG_SOC_EXYNOS7870
+#if !defined(CONFIG_SOC_EXYNOS7870) && !defined(CONFIG_SOC_EXYNOS7880)
 	dma_addr_t dma_addr;
 	u32 val;
 #endif
@@ -537,7 +577,7 @@ static int preallocate_dma_buffer_of(struct snd_pcm *pcm, int stream,
 
 	pr_debug("Entered %s\n", __func__);
 
-#ifndef CONFIG_SOC_EXYNOS7870
+#if !defined(CONFIG_SOC_EXYNOS7870) && !defined(CONFIG_SOC_EXYNOS7880)
 	if (of_property_read_u32(np, dma_prop_addr[stream], &val))
 		return -ENOMEM;
 	dma_addr = (dma_addr_t)val;
@@ -695,7 +735,7 @@ static int preallocate_dma_buffer_of(struct snd_pcm *pcm, int stream,
 	if (of_find_property(np, dma_prop_iommu[stream], NULL))
 		return -ENOMEM;
 	else
-#ifndef CONFIG_SOC_EXYNOS7870
+#if !defined(CONFIG_SOC_EXYNOS7870) && !defined(CONFIG_SOC_EXYNOS7880)
 		buf->area = ioremap(buf->addr, size);
 #endif
 #endif

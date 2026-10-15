@@ -322,6 +322,28 @@ config SND_SOC_SAMSUNG_UNIVERSAL7870_RT5659
         help
         Say Y if you want to add support for SoC audio on the universal7870 board.
 
+config SND_SOC_SAMSUNG_SMDK7880_COD3026X
+        tristate "SoC I2S Audio support for COD3026X on SMDK7880"
+        depends on SND_SOC_SAMSUNG
+        select SND_SAMSUNG_I2S
+        select SND_SAMSUNG_AUDSS
+        select SND_SOC_DUMMY_CODEC
+        select SND_SOC_COD3026X
+        select SND_SOC_EXYNOS_AUDMIXER
+        help
+        Say Y if you want to add support for SoC audio on the smdk7880 board.
+
+config SND_SOC_SAMSUNG_UNIVERSAL7880_COD3026X
+        tristate "SoC I2S Audio support for COD3026X on UNIVERSAL7880"
+        depends on SND_SOC_SAMSUNG
+        select SND_SAMSUNG_I2S
+        select SND_SAMSUNG_AUDSS
+        select SND_SOC_DUMMY_CODEC
+        select SND_SOC_COD3026X
+        select SND_SOC_EXYNOS_AUDMIXER
+        help
+        Say Y if you want to add support for SoC audio on the universal7880 board.
+
 config SND_SOC_SAMSUNG_VERBOSE_DEBUG
 	tristate "Enable verbose debugging of Audio on Samsung Platforms"
 

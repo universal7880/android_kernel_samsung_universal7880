@@ -56,6 +56,14 @@
 #define LPASS_INTR_UART		(1 << 1)
 #define LPASS_INTR_SFR		(1 << 0)
 
+#ifdef CONFIG_SOC_EXYNOS7880
+#define LPCLK_CTRLID_OFFLOAD	(1 << 0)
+#define LPCLK_CTRLID_LEGACY	(1 << 1)
+#define LPCLK_CTRLID_RECORD	(1 << 2)
+extern void lpass_update_lpclock(u32 ctrlid, bool idle);
+extern void lpass_update_lpclock_impl(struct device *dev, u32 ctrlid, bool idle);
+#endif
+
 struct lpass_info {
 	spinlock_t		lock;
 	bool			valid;

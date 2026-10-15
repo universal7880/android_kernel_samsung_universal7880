@@ -30,6 +30,12 @@ struct s3c_dma_params {
 	bool compr_dma;
 };
 
+#ifdef CONFIG_SOC_EXYNOS7880
+int check_adma_status(void);
+void inc_dram_usage_count(void);
+void dec_dram_usage_count(void);
+#endif
+
 int asoc_dma_platform_register(struct device *dev);
 void asoc_dma_platform_unregister(struct device *dev);
 

@@ -35,6 +35,7 @@ obj-$(CONFIG_SOC_EXYNOS7580) += lpass.o lpass-exynos7580.o
 obj-$(CONFIG_SOC_EXYNOS7890) += lpass.o lpass-exynos7890.o
 obj-$(CONFIG_SOC_EXYNOS8890) += lpass.o lpass-exynos8890.o
 obj-$(CONFIG_SOC_EXYNOS7870) += lpass-exynos7870.o
+obj-$(CONFIG_SOC_EXYNOS7880) += lpass-exynos7880.o
 endif
 obj-$(CONFIG_SND_SOC_SAMSUNG) += snd-soc-eax-dai.o snd-soc-eax-dma.o
 obj-$(CONFIG_SND_ESA_SA_EFFECT) += snd-soc-esa-sa-effect.o
@@ -111,3 +112,7 @@ endif
 obj-$(CONFIG_SND_SOC_SAMSUNG_UNIVERSAL7870_RT5659) += snd-soc-universal7870-rt5659.o
 
 obj-$(CONFIG_SND_SAMSUNG_SEIREN) += seiren/
+snd-soc-smdk7880-cod3026x-objs := smdk7880-cod3026.o
+snd-soc-universal7880-cod3026x-objs := universal7880-cod3026.o
+obj-$(CONFIG_SND_SOC_SAMSUNG_SMDK7880_COD3026X) += snd-soc-smdk7880-cod3026x.o
+obj-$(CONFIG_SND_SOC_SAMSUNG_UNIVERSAL7880_COD3026X) += snd-soc-universal7880-cod3026x.o

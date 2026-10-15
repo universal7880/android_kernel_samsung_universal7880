@@ -508,10 +508,20 @@ static void eax_adma_trigger(bool on)
 	if (on) {
 		di.running = on;
 		lpass_dma_enable(true);
+#ifdef CONFIG_SOC_EXYNOS7880
+		inc_dram_usage_count();
+		lpass_update_lpclock(LPCLK_CTRLID_LEGACY, true);
+#endif
+
 		di.params->ops->trigger(di.params->ch);
 	} else {
 		ret = di.params->ops->stop(di.params->ch);
 		lpass_dma_enable(false);
+#ifdef CONFIG_SOC_EXYNOS7880
+		dec_dram_usage_count();
+		lpass_update_lpclock(LPCLK_CTRLID_LEGACY, false);
+#endif
+
 		di.prepare_done = false;
 		di.running = on;
 		pr_info("%s:DMA stop retrun value:%d\n", __func__, ret);
