@@ -328,6 +328,9 @@ struct mms_ts_info {
 
 	u8 check_multi;
 	unsigned int multi_count;
+#ifdef CONFIG_SOC_EXYNOS7880
+	bool dt2w_enable;
+#endif
 	unsigned int comm_err_count;
 };
 

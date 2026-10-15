@@ -363,6 +363,9 @@ void mms_config_input(struct mms_ts_info *info)
 	set_bit(EV_KEY, input_dev->evbit);
 	set_bit(KEY_POWER, input_dev->keybit);
 #endif
+#ifdef CONFIG_SOC_EXYNOS7880
+	set_bit(KEY_POWER, input_dev->keybit);
+#endif
 	set_bit(KEY_BLACK_UI_GESTURE, input_dev->keybit);
 	tsp_debug_dbg(true, &info->client->dev, "%s [DONE]\n", __func__);
 	return;
@@ -433,6 +436,39 @@ int mms_lowpower_mode(struct mms_ts_info *info, int on)
 		input_err(true, &info->client->dev, "%s not supported\n", __func__);
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	{
+		u8 area_cmd[11] = {0};
+
+	mutex_lock(&info->lock);
+	info->cmd_busy = true;
+	mutex_unlock(&info->lock);
+
+	if (info->dt2w_enable) {
+		area_cmd[0] = MIP_R0_AOT;
+		area_cmd[1] = MIP_R0_AOT_BOX_W;
+		area_cmd[2] = info->max_x & 0xff;
+		area_cmd[3] = (info->max_x >> 8) & 0xff;
+		area_cmd[4] = info->max_y & 0xff;
+		area_cmd[5] = (info->max_y >> 8) & 0xff;
+		/* x and y are zero, so no need to explicitly set */
+		disable_irq(info->client->irq);
+		if (mms_i2c_write(info, area_cmd, 10)) {
+			input_err(true, &info->client->dev, "%s [ERROR] mms_i2c_write\n", __func__);
+			enable_irq(info->client->irq);
+			goto out;
+		}
+		enable_irq(info->client->irq);
+	}
+
+out:
+	mutex_lock(&info->lock);
+	info->cmd_busy = false;
+	mutex_unlock(&info->lock);
+
+	}
+#endif
 
 	/*	bit	Power state
 	  *	0	active

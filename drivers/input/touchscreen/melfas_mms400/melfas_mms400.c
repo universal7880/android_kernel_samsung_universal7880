@@ -786,6 +786,9 @@ static irqreturn_t mms_interrupt(int irq, void *dev_id)
 //	int event_size = info->event_size;
 	u8 category = 0;
 	u8 alert_type = 0;
+#ifdef CONFIG_SOC_EXYNOS7880
+	unsigned int keycode = KEY_BLACK_UI_GESTURE;
+#endif
 
 	if (info->lowpower_mode){
 		pm_wakeup_event(info->input_dev->dev.parent, 1000);
@@ -816,6 +819,9 @@ static irqreturn_t mms_interrupt(int irq, void *dev_id)
 						__func__, info->lowpower_flag);
 		} else if(alert_type & MMS_LPM_FLAG_AOD) {
 			info->scrub_id = SPONGE_EVENT_TYPE_AOD_DOUBLETAB;
+#ifdef CONFIG_SOC_EXYNOS7880
+			keycode = info->dt2w_enable ? KEY_POWER : KEY_BLACK_UI_GESTURE;
+#endif
 
 			wbuf[0] = MIP_R0_AOT;
 			wbuf[1] = MIP_R0_AOT_POSITION_X;
@@ -838,9 +844,17 @@ static irqreturn_t mms_interrupt(int irq, void *dev_id)
 			input_err(true, &client->dev, "%s [ERROR] Read a wrong aot action %x\n", __func__, alert_type);
 			return IRQ_HANDLED;
 		}
+#ifdef CONFIG_SOC_EXYNOS7880
+		input_report_key(info->input_dev, keycode, 1);
+#else
 		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+#endif
 		input_sync(info->input_dev);
+#ifdef CONFIG_SOC_EXYNOS7880
+		input_report_key(info->input_dev, keycode, 0);
+#else
 		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
+#endif
 		input_sync(info->input_dev);
 		return IRQ_HANDLED;
 	}
