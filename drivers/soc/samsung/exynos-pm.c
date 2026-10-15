@@ -30,7 +30,7 @@
 
 #if defined(CONFIG_SOC_EXYNOS8890)
 #define GPIO_ALIVE_PA_ADDR             0x10580000
-#elif defined(CONFIG_SOC_EXYNOS7870)
+#elif defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_SOC_EXYNOS7880)
 #define GPIO_ALIVE_PA_ADDR             0x139F0000
 #endif
 #define WAKEUP_STAT_EINT                (1 << 0)
@@ -307,11 +307,20 @@ static int exynos_pm_syscore_suspend(void)
 	is_cp_call = is_cp_aud_enabled();
 	if (is_cp_call) {
 		psci_index = PSCI_SYSTEM_CP_CALL;
+#ifdef CONFIG_SOC_EXYNOS7880
+		return exynos_prepare_sys_powerdown(SYS_LPD);
+#else
 		exynos_prepare_cp_call();
+#endif
 		pr_info("%s: Enter CP Call mode for voice call\n",__func__);
 	} else {
+#ifdef CONFIG_SOC_EXYNOS7880
+		psci_index = PSCI_CLUSTER_SLEEP;
+		return exynos_prepare_sys_powerdown(SYS_DSTOP);
+#else
 		psci_index = PSCI_SYSTEM_SLEEP;
 		exynos_prepare_sys_powerdown(SYS_SLEEP);
+#endif
 		pr_info("%s: Enter sleep mode\n",__func__);
 	}
 
@@ -322,10 +331,18 @@ static void exynos_pm_syscore_resume(void)
 {
 	pr_info("========== wake up ==========\n");
 	if (is_cp_call)
+#ifdef CONFIG_SOC_EXYNOS7880
+		exynos_wakeup_sys_powerdown(SYS_LPD, (bool)early_wakeup);
+#else
 		exynos_wakeup_cp_call(early_wakeup);
+#endif
 	else
+#ifdef CONFIG_SOC_EXYNOS7880
+		exynos_wakeup_sys_powerdown(SYS_DSTOP, (bool)early_wakeup);
+#else
 		exynos_wakeup_sys_powerdown(SYS_SLEEP,
 					(bool)early_wakeup);
+#endif
 
 	exynos_show_wakeup_reason((bool)early_wakeup);
 

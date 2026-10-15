@@ -48,7 +48,11 @@ extern int blkpwr_status(struct cal_pd *pd);
 
 
 struct cal_pm_ops {
+#ifdef CONFIG_SOC_EXYNOS7880
+	int (*pm_enter)(int mode);
+#else
 	void (*pm_enter)(int mode);
+#endif
 	void (*pm_exit)(int mode);
 	void (*pm_earlywakeup)(int mode);
 	void (*pm_init)(void);

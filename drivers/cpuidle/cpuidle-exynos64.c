@@ -190,7 +190,15 @@ static int exynos_enter_lpm(struct cpuidle_device *dev,
 #endif
 	prepare_idle(dev->cpu);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	ret = exynos_prepare_sys_powerdown(mode);
+	if (ret) {
+		post_idle(dev->cpu);
+		return exynos_enter_c2(dev, drv, IDLE_C2);
+	}
+#else
 	exynos_prepare_sys_powerdown(mode);
+#endif
 
 	cpuidle_profile_start(dev->cpu, index, mode);
 

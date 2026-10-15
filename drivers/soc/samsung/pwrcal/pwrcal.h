@@ -51,6 +51,9 @@ enum cal_dfs_ext_ops {
 	cal_dfs_initsmpl		= 0,
 	cal_dfs_setsmpl		= 1,
 	cal_dfs_get_smplstatus	= 2,
+#ifdef CONFIG_SOC_EXYNOS7880
+	cal_dfs_deinitsmpl	= 3,
+#endif
 
 	cal_dfs_dvs = 30,
 
@@ -58,6 +61,9 @@ enum cal_dfs_ext_ops {
 	cal_dfs_mif_is_dll_on	= 50,
 
 	cal_dfs_cpu_idle_clock_down = 60,
+#ifdef CONFIG_SOC_EXYNOS7880
+	cal_dfs_ctrl_clk_gate	= 70,
+#endif
 };
 
 extern int cal_dfs_ext_ctrl(unsigned int id,
@@ -65,6 +71,9 @@ extern int cal_dfs_ext_ctrl(unsigned int id,
 				int para);
 
 
+#ifdef CONFIG_SOC_EXYNOS7880
+extern void cal_asv_set_ssa1(unsigned int id, unsigned int gnum, unsigned int ssa1);
+#endif
 extern void cal_asv_print_info(void);
 extern void cal_rcc_print_info(void);
 extern int cal_asv_set_rcc_table(void);

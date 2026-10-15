@@ -227,7 +227,11 @@ int cal_pd_status(unsigned int id)
 int cal_pm_enter(int mode)
 {
 	if (cal_pm_ops.pm_enter)
+#ifdef CONFIG_SOC_EXYNOS7880
+		return cal_pm_ops.pm_enter(mode);
+#else
 		cal_pm_ops.pm_enter(mode);
+#endif
 
 	return 0;
 }
@@ -533,6 +537,12 @@ int cal_dfs_ext_ctrl(unsigned int id,
 			if (dfsops->init_smpl)
 				return dfsops->init_smpl();
 			break;
+#ifdef CONFIG_SOC_EXYNOS7880
+		case cal_dfs_deinitsmpl:
+			if (dfsops->deinit_smpl)
+				return dfsops->deinit_smpl();
+			break;
+#endif
 		case cal_dfs_setsmpl:
 			if (dfsops->set_smpl)
 				return dfsops->set_smpl();
@@ -553,6 +563,12 @@ int cal_dfs_ext_ctrl(unsigned int id,
 			if (dfsops->cpu_idle_clock_down)
 				return dfsops->cpu_idle_clock_down(para);
 			break;
+#ifdef CONFIG_SOC_EXYNOS7880
+		case cal_dfs_ctrl_clk_gate:
+			if (dfsops->ctrl_clk_gate)
+				return dfsops->ctrl_clk_gate(para);
+			break;
+#endif
 		default:
 			return -1;
 		}
@@ -641,6 +657,15 @@ int cal_asv_get_tablever(void)
 	return -1;
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+void cal_asv_set_ssa1(unsigned int id, unsigned int gnum, unsigned int ssa1)
+{
+	if (cal_asv_ops.set_ssa1)
+		cal_asv_ops.set_ssa1(id, gnum, ssa1);
+
+}
+
+#endif
 void cal_asv_set_ssa0(unsigned int id, unsigned int ssa0)
 {
 	if (cal_asv_ops.set_ssa0)

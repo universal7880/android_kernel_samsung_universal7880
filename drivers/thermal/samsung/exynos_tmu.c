@@ -87,6 +87,9 @@ struct exynos_tmu_data {
 	enum soc_type soc;
 	struct work_struct irq_work;
 	struct mutex lock;
+#ifdef CONFIG_SOC_EXYNOS7880
+	struct clk *gate_clk;
+#endif
 	u16 temp_error1, temp_error2;
 	struct regulator *regulator;
 	struct thermal_sensor_conf *reg_conf;
@@ -882,6 +885,11 @@ static const struct of_device_id exynos_tmu_match[] = {
 		.compatible = "samsung,exynos8890-tmu",
 		.data = (void *)EXYNOS8890_TMU_DRV_DATA,
 	},
+#ifdef CONFIG_SOC_EXYNOS7880
+	{ .compatible = "samsung,exynos7880-tmu",
+		.data = (void *)EXYNOS7880_TMU_DRV_DATA,
+	},
+#endif
 	{
 		.compatible = "samsung,exynos7870-tmu",
 		.data = (void *)EXYNOS7870_TMU_DRV_DATA,
@@ -1193,6 +1201,22 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 
 	pdata = data->pdata;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (pdata->type == SOC_ARCH_EXYNOS7880) {
+		data->gate_clk = devm_clk_get(&pdev->dev, "gate_tmu");
+		if (IS_ERR(data->gate_clk)) {
+			dev_err(&pdev->dev,
+				"failed to find tmu gate clock\n");
+			ret = PTR_ERR(data->gate_clk);
+			return ret;
+		}
+		ret = clk_prepare_enable(data->gate_clk);
+		if (ret)
+			return ret;
+	}
+
+#endif
+
 	INIT_WORK(&data->irq_work, exynos_tmu_work);
 
 	if (pdata->type == SOC_ARCH_EXYNOS3250 ||
@@ -1204,6 +1228,9 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	    pdata->type == SOC_ARCH_EXYNOS5440 ||
 	    pdata->type == SOC_ARCH_EXYNOS7580 ||
 	    pdata->type == SOC_ARCH_EXYNOS7870 ||
+#ifdef CONFIG_SOC_EXYNOS7880
+	    pdata->type == SOC_ARCH_EXYNOS7880 ||
+#endif
 	    pdata->type == SOC_ARCH_EXYNOS8890)
 		data->soc = pdata->type;
 	else {
@@ -1306,6 +1333,9 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 
 	return 0;
 err:
+#ifdef CONFIG_SOC_EXYNOS7880
+	clk_disable_unprepare(data->gate_clk);
+#endif
 	return ret;
 }
 
@@ -1317,6 +1347,10 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 	exynos_unregister_thermal(data->reg_conf);
 
 	exynos_tmu_control(pdev, false);
+#ifdef CONFIG_SOC_EXYNOS7880
+	clk_disable_unprepare(data->gate_clk);
+#endif
+
 
 	if (!IS_ERR(data->regulator))
 		regulator_disable(data->regulator);

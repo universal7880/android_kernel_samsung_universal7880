@@ -25,6 +25,8 @@ char *pd_name[] = {"pd-g3d", "pd-cam0", "pd-cam1", "pd-isp0", "pd-isp1", "pd-vpp
 char *pd_name[] = {"pd-aud", "pd-isp", "pd-g3d", "pd-disp", "pd-mfcmscl", };
 #elif defined(CONFIG_SOC_EXYNOS8890)
 char *pd_name[] = {"pd-isp0", "pd-isp1", "pd-cam1", "pd-cam0", "pd-mscl", "pd-g3d", "pd-disp0","pd-aud","pd-mfc","pd-disp1", };
+#elif defined(CONFIG_SOC_EXYNOS7880)
+char *pd_name[] = {"pd-dispaud", "pd-isp", "pd-mfcmscl", "pd-g3d", };
 #elif defined(CONFIG_SOC_EXYNOS7870)
 char *pd_name[] = {"pd-dispaud", "pd-cam0", "pd-mfcmscl", "pd-g3d", };
 #endif
@@ -284,7 +286,7 @@ static int runtime_pm_test_probe(struct platform_device *pdev)
 	int ret, i;
 
 	runtime_pm_class = class_create(THIS_MODULE, "runtime_pm");
-#if defined(CONFIG_SOC_EXYNOS5433) || defined(CONFIG_SOC_EXYNOS7420) || defined(CONFIG_SOC_EXYNOS7580) || defined(CONFIG_SOC_EXYNOS8890) || defined(CONFIG_SOC_EXYNOS7870)
+#if defined(CONFIG_SOC_EXYNOS5433) || defined(CONFIG_SOC_EXYNOS7420) || defined(CONFIG_SOC_EXYNOS7580) || defined(CONFIG_SOC_EXYNOS8890) || defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_SOC_EXYNOS7880)
 	for (i = 0; i < ARRAY_SIZE(pd_name); i++) {
 		runtime_pm_dev = device_create(runtime_pm_class, NULL, 0, NULL, pd_name[i]);
 		ret = sysfs_create_group(&runtime_pm_dev->kobj, &control_device_attr_group);

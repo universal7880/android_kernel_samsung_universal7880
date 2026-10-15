@@ -154,6 +154,48 @@ static void mngs_reset_control(int en)
 	}
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+#define DFD_L2RSTDISABLE_CPUCL0_EN      (1 << 11)
+#define DFD_L1RSTDISABLE_CPUCL0_EN      (1 << 10)
+#define DFD_L2RSTDISABLE_CPUCL1_EN      (1 << 9)
+#define DFD_L1RSTDISABLE_CPUCL1_EN      (1 << 8)
+#define DFD_L2RSTDISABLE_CPUCL0_CLR     (1 << 7)
+#define DFD_L1RSTDISABLE_CPUCL0_CLR     (1 << 6)
+#define DFD_L2RSTDISABLE_CPUCL1_CLR     (1 << 5)
+#define DFD_L1RSTDISABLE_CPUCL1_CLR     (1 << 4)
+
+void cluster1_reset_control(int en)
+{
+	u32 reg_val;
+	u32 check_dumpGPR;
+
+	check_dumpGPR = DFD_EDPCSR_DUMP_EN &
+		readl(exynos_pmu_base + EXYNOS_PMU_RESET_SEQUENCER_CONFIGURATION);
+
+	if (!check_dumpGPR)
+		return;
+
+	if (en) {
+		reg_val = DFD_EDPCSR_DUMP_EN
+			| DFD_L2RSTDISABLE_CPUCL0_EN | DFD_L1RSTDISABLE_CPUCL0_EN
+			| DFD_L2RSTDISABLE_CPUCL1_EN | DFD_L1RSTDISABLE_CPUCL1_EN;
+		writel(reg_val, exynos_pmu_base + EXYNOS_PMU_RESET_SEQUENCER_CONFIGURATION);
+	} else {
+		reg_val = readl(exynos_pmu_base + EXYNOS_PMU_RESET_SEQUENCER_CONFIGURATION);
+		if (reg_val) {
+			reg_val = DFD_EDPCSR_DUMP_EN
+				| DFD_L2RSTDISABLE_CPUCL1_CLR | DFD_L1RSTDISABLE_CPUCL1_CLR
+				| DFD_L2RSTDISABLE_CPUCL0_CLR | DFD_L1RSTDISABLE_CPUCL0_CLR;
+		}
+		writel(reg_val, exynos_pmu_base + EXYNOS_PMU_RESET_SEQUENCER_CONFIGURATION);
+		reg_val = DFD_EDPCSR_DUMP_EN
+			| DFD_L2RSTDISABLE_CPUCL0_EN | DFD_L1RSTDISABLE_CPUCL0_EN;
+		writel(reg_val, exynos_pmu_base + EXYNOS_PMU_RESET_SEQUENCER_CONFIGURATION);
+	}
+}
+
+#endif
+
 #define REBOOT_MODE_NORMAL      0x00
 #define REBOOT_MODE_CHARGE      0x0A
 /* Reboot into fastboot mode */

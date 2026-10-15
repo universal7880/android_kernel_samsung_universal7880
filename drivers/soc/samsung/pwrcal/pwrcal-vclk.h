@@ -131,6 +131,10 @@ struct dfs_table {
 struct vclk_dfs_ops {
 	int (*set_ema)(unsigned int volt);
 	int (*init_smpl)(void);
+#ifdef CONFIG_SOC_EXYNOS7880
+	int (*deinit_smpl)(void);
+	int (*ctrl_clk_gate)(unsigned int enable);
+#endif
 	int (*set_smpl)(void);
 	int (*get_smpl)(void);
 	int (*dvs)(int command);	/* 0: DVS on  1: DVS off   2: DVS init */

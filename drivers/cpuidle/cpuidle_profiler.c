@@ -135,7 +135,7 @@ void __cpuidle_profile_start(int cpu, int state, int substate)
 				info = &lpm_info;
 				enter_idle_state(info, LPM_SICD, now);
 				break;
-#if !defined(CONFIG_SOC_EXYNOS7870)
+#if !defined(CONFIG_SOC_EXYNOS7870) && !defined(CONFIG_SOC_EXYNOS7880)
 			case C2_SICD_CPD:
 				info = &cpd_info[to_cluster(cpu)];
 				enter_idle_state(info, 0, now);
@@ -243,6 +243,14 @@ static ktime_t profile_start_time;
 static ktime_t profile_finish_time;
 static s64 profile_time;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+static char *sys_powerdown_str[NUM_SYS_POWERDOWN] = {
+	"SICD",
+	"STOP",
+	"LPD",
+	"DSTOP"
+};
+#else
 static char * sys_powerdown_str[NUM_SYS_POWERDOWN] = {
 	"SICD",
 #if !defined(CONFIG_SOC_EXYNOS7870)
@@ -259,6 +267,7 @@ static char * sys_powerdown_str[NUM_SYS_POWERDOWN] = {
 #endif
 	"SLEEP"
 };
+#endif
 
 #define get_sys_powerdown_str(mode)	sys_powerdown_str[mode]
 

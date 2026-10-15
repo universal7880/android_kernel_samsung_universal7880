@@ -497,6 +497,10 @@ static int is_sicd_available(unsigned int cpu)
 int enter_c2(unsigned int cpu, int index)
 {
 	unsigned int cluster = get_cluster_id(cpu);
+#ifdef CONFIG_SOC_EXYNOS7880
+	int ret = 0;
+	int prev_index = index;
+#endif
 
 	exynos_cpu.power_down(cpu);
 
@@ -525,9 +529,20 @@ int enter_c2(unsigned int cpu, int index)
 			index = PSCI_SYSTEM_IDLE_CLUSTER_SLEEP;
 #endif
 		} else {
+#ifdef CONFIG_SOC_EXYNOS7880
+			ret = exynos_prepare_sys_powerdown(SYS_SICD);
+#else
 			exynos_prepare_sys_powerdown(SYS_SICD);
+#endif
 			index = PSCI_SYSTEM_IDLE;
 		}
+
+#ifdef CONFIG_SOC_EXYNOS7880
+		if (ret) {
+			index = prev_index;
+			goto out;
+		}
+#endif
 
 		s3c24xx_serial_fifo_wait();
 		pm_info->sicd_entered = SYS_SICD;
@@ -659,29 +674,52 @@ static int parsing_dt_wakeup_mask(struct device_node *np)
 /******************************************************************************
  *                           System power down mode                           *
  ******************************************************************************/
-void exynos_prepare_sys_powerdown(enum sys_powerdown mode)
+#ifdef CONFIG_SOC_EXYNOS7880
+int
+#else
+void
+#endif
+exynos_prepare_sys_powerdown(enum sys_powerdown mode)
 {
 	/*
 	 * exynos_prepare_sys_powerdown() is called by only cpu0.
 	 */
+#ifdef CONFIG_SOC_EXYNOS7880
+	int ret;
+
+	if (mode >= NUM_SYS_POWERDOWN)
+		return -EINVAL;
+#else
 	unsigned int cpu = 0;
+#endif
 
 	exynos_set_idle_ip_mask(mode);
 	exynos_set_wakeupmask(mode);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	ret = cal_pm_enter(mode);
+	if (ret)
+		return ret;
+#else
 	cal_pm_enter(mode);
+#endif
 
 	switch (mode) {
 	case SYS_SICD:
 		exynos_pm_sicd_enter();
 		break;
+#ifndef CONFIG_SOC_EXYNOS7880
 	case SYS_AFTR:
 		exynos_cpu.power_down(cpu);
 		exynos_cpu.power_down(cpu);
 		break;
+#endif
 	default:
 		break;
 	}
+#ifdef CONFIG_SOC_EXYNOS7880
+	return 0;
+#endif
 }
 
 void exynos_wakeup_sys_powerdown(enum sys_powerdown mode, bool early_wakeup)
@@ -689,7 +727,12 @@ void exynos_wakeup_sys_powerdown(enum sys_powerdown mode, bool early_wakeup)
 	/*
 	 * exynos_wakeup_sys_powerdown() is called by only cpu0.
 	 */
+#ifndef CONFIG_SOC_EXYNOS7880
 	unsigned int cpu = 0;
+#else
+	if (mode >= NUM_SYS_POWERDOWN)
+		return;
+#endif
 
 	if (early_wakeup)
 		cal_pm_earlywakeup(mode);
@@ -700,10 +743,12 @@ void exynos_wakeup_sys_powerdown(enum sys_powerdown mode, bool early_wakeup)
 	case SYS_SICD:
 		exynos_pm_sicd_exit();
 		break;
+#ifndef CONFIG_SOC_EXYNOS7880
 	case SYS_AFTR:
 		if (early_wakeup)
 			exynos_cpu.power_up(cpu);
 		break;
+#endif
 	default:
 		break;
 	}

@@ -129,4 +129,14 @@ config ARM_EXYNOS7870_BUS_DEVFREQ
 	help
 	  This adds the DEVFREQ driver for Exynos7870 memory and int.
 
+config ARM_EXYNOS7880_BUS_DEVFREQ
+	bool "ARM Exynos7880 Memory Bus DEVFREQ Driver"
+	default y
+	depends on ARM_EXYNOS_DEVFREQ
+	depends on SOC_EXYNOS7880
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	select DEVFREQ_GOV_SIMPLE_EXYNOS
+	help
+	  This adds the DEVFREQ driver for Exynos7880 memory and int.
+
 endif # PM_DEVFREQ

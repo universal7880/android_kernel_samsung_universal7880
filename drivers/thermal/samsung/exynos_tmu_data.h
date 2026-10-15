@@ -351,4 +351,11 @@ extern struct exynos_tmu_init_data exynos7870_default_tmu_data;
 #else
 #define EXYNOS7870_TMU_DRV_DATA (NULL)
 #endif
+#if defined(CONFIG_SOC_EXYNOS7880)
+extern struct exynos_tmu_init_data exynos7880_default_tmu_data;
+#define EXYNOS7880_TMU_DRV_DATA (&exynos7880_default_tmu_data)
+#else
+#define EXYNOS7880_TMU_DRV_DATA (NULL)
+#endif
+
 #endif /*_EXYNOS_TMU_DATA_H*/

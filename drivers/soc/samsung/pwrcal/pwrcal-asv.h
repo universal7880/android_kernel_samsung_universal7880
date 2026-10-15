@@ -10,6 +10,9 @@ struct cal_asv_ops {
 	int (*get_tablever)(void);
 	int (*set_rcc_table)(void);
 	int (*asv_init)(void);
+#ifdef CONFIG_SOC_EXYNOS7880
+	void (*set_ssa1)(unsigned int id, unsigned int gnum, unsigned int ssa1);
+#endif
 	void (*set_ssa0)(unsigned int id, unsigned int ssa0);
 };
 

@@ -36,7 +36,11 @@ static void exynos_genpd_power_on_pre(struct exynos_pm_domain *pd)
 {
 	exynos_update_ip_idle_status(pd->idle_ip_index, 0);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (!strcmp("pd-isp", pd->name))
+#else
 	if (!strcmp("pd-cam0", pd->name))
+#endif
 		exynos_devfreq_sync_voltage(DEVFREQ_CAM, true);
 }
 
@@ -57,7 +61,11 @@ static void exynos_genpd_power_off_post(struct exynos_pm_domain *pd)
 {
 	exynos_update_ip_idle_status(pd->idle_ip_index, 1);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (!strcmp("pd-isp", pd->name))
+#else
 	if (!strcmp("pd-cam0", pd->name))
+#endif
 		exynos_devfreq_sync_voltage(DEVFREQ_CAM, false);
 }
 
@@ -75,7 +83,7 @@ static int exynos_genpd_power_on(struct generic_pm_domain *genpd)
 		pr_debug(PM_DOMAIN_PREFIX "%s is Logical sub power domain, dose not have to power on control\n", pd->name);
 		return 0;
 	}
-#if defined(CONFIG_SOC_EXYNOS7870)
+#if defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_SOC_EXYNOS7880)
 	if (!strcmp(genpd->name ,"pd-dispaud")) {
 		if (is_cp_aud_enabled()) {
 			printk("%s is not performed because of CP call. \n",__func__);
@@ -120,7 +128,7 @@ static int exynos_genpd_power_off(struct generic_pm_domain *genpd)
 		return 0;
 	}
 
-#if defined(CONFIG_SOC_EXYNOS7870)
+#if defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_SOC_EXYNOS7880)
 	if (!strcmp(genpd->name ,"pd-dispaud")) {
 		if (is_cp_aud_enabled()) {
 			printk("%s is not performed because of CP call. \n",__func__);

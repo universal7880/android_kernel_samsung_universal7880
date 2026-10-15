@@ -85,9 +85,10 @@ static int exynos_pm_dvs_probe(struct platform_device *pdev)
 
 static int exynos_pm_dvs_remove(struct platform_device *pdev)
 {
-	struct exynos_dvs_info *di;
+	struct exynos_dvs_info *di, *next;
 
-	list_for_each_entry(di, &regulator_list, node) {
+	list_for_each_entry_safe(di, next, &regulator_list, node) {
+		list_del(&di->node);
 		regulator_put(di->regulator);
 		kfree(di);
 	}
@@ -139,7 +140,7 @@ static const struct of_device_id exynos_pm_dvs_match[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, exynos_pm_dvs);
+MODULE_DEVICE_TABLE(of, exynos_pm_dvs_match);
 
 static struct platform_device_id exynos_pm_dvs_driver_ids[] = {
 	{

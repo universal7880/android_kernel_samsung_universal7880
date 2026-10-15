@@ -27,4 +27,11 @@ obj-$(CONFIG_SOC_EXYNOS7870)	+= S5E7870/S5E7870-cmu.o S5E7870/S5E7870-pmu.o \
 				S5E7870/S5E7870-dfs.o S5E7870/S5E7870-asv.o \
 				S5E7870/S5E7870-syspwr.o S5E7870/S5E7870-vclk.o \
 				S5E7870/S5E7870-drampara.o S5E7870/S5E7870-pll.o \
-				S5E7870/S5E7870-rae.o \
+				S5E7870/S5E7870-rae.o
+
+obj-$(CONFIG_SOC_EXYNOS7880)    += S5E7880/S5E7880-cmu.o S5E7880/S5E7880-pmu.o \
+                                S5E7880/S5E7880-dfs.o S5E7880/S5E7880-asv.o \
+                                S5E7880/S5E7880-syspwr.o S5E7880/S5E7880-vclk.o \
+                                S5E7880/S5E7880-drampara.o \
+                                S5E7880/S5E7880-pll.o \
+                                S5E7880/S5E7880-rae.o

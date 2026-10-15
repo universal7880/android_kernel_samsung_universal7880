@@ -62,6 +62,13 @@ config MCINFO_SYSFS
 	depends on EXYNOS_MCINFO
 	default	y if SYSFS
 
+config EXYNOS_PM_DVS
+	bool "Exynos suspend voltage control"
+	depends on SOC_EXYNOS7880 && REGULATOR
+	help
+	  Apply the suspend and resume voltages specified by the
+	  samsung,exynos-pm-dvs device-tree node.
+
 endif #SOC_SAMSUNG
 
 config SEC_INCELL

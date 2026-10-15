@@ -69,6 +69,11 @@ static const char * __init product_id_to_name(unsigned int product_id)
 	case EXYNOS7870_SOC_ID:
 		soc_name = "EXYNOS7870";
 		break;
+#ifdef CONFIG_SOC_EXYNOS7880
+	case EXYNOS7880_SOC_ID:
+		soc_name = "EXYNOS7880";
+		break;
+#endif
 	case EXYNOS8890_SOC_ID:
 		soc_name = "EXYNOS8890";
 		break;
@@ -116,6 +121,10 @@ void __init exynos_chipid_early_init(struct device *dev)
 	exynos_soc_info.unique_id  = __raw_readl(exynos_chipid_base + UNIQUE_ID1);
 	exynos_soc_info.unique_id  |= (u64)__raw_readl(exynos_chipid_base + UNIQUE_ID2) << 32;
 	exynos_soc_info.revision = exynos_soc_info.product_id & EXYNOS_REV_MASK;
+#ifdef CONFIG_SOC_EXYNOS7880
+	if ((exynos_soc_info.product_id & EXYNOS_SOC_MASK) == EXYNOS7880_SOC_ID)
+		exynos_soc_info.revision -= 1;
+#endif
 }
 
 static int __init exynos_chipid_probe(struct platform_device *pdev)
