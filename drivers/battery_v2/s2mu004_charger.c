@@ -468,6 +468,10 @@ static void s2mu004_set_topoff_current(
 	int eoc_1st_2nd, int current_limit)
 {
 	int data;
+#ifdef CONFIG_S2MU004_MODE_CHANGE_BY_TOPOFF
+	union power_supply_propval value;
+	struct power_supply *psy;
+#endif
 
 	pr_info("[DEBUG]%s: current  %d \n", __func__, current_limit);
 	if (current_limit <= 100)
@@ -481,6 +485,16 @@ static void s2mu004_set_topoff_current(
 	case 1:
 		s2mu004_update_reg(charger->i2c, S2MU004_CHG_CTRL11,
 			data << FIRST_TOPOFF_CURRENT_SHIFT, FIRST_TOPOFF_CURRENT_MASK);
+#ifdef CONFIG_S2MU004_MODE_CHANGE_BY_TOPOFF
+		psy = power_supply_get_by_name(charger->pdata->fuelgauge_name);
+		if (!psy)
+			pr_err("%s, fail to set topoff current to FG\n", __func__);
+		else {
+			value.intval = current_limit;
+			psy_do_property(charger->pdata->fuelgauge_name, set,
+				POWER_SUPPLY_PROP_CURRENT_FULL, value);
+		}
+#endif
 		break;
 	case 2:
 		s2mu004_update_reg(charger->i2c, S2MU004_CHG_CTRL11,
@@ -588,6 +602,11 @@ static bool s2mu004_chg_init(struct s2mu004_charger_data *charger)
 	/* Top off debounce time set 1 sec */
 	s2mu004_update_reg(charger->i2c, 0xC0, 0x3 << 6 , 0x3 << 6);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	/* Set the minimum charging OCP level to 6 A. */
+	s2mu004_write_reg(charger->i2c, 0x29, 0x04);
+#endif
+
 	switch (charger->pdata->chg_switching_freq) {
 	case S2MU004_OSC_BUCK_FRQ_750kHz :
 		s2mu004_update_reg(charger->i2c, S2MU004_CHG_CTRL12,
@@ -605,6 +624,16 @@ static bool s2mu004_chg_init(struct s2mu004_charger_data *charger)
 	}
 	s2mu004_read_reg(charger->i2c, S2MU004_CHG_CTRL12, &temp);
 	pr_info("%s : S2MU004_CHG_CTRL12 : 0x%x\n", __func__, temp);
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	/*
+	 * Disable auto-restart charging feature.
+	 * Prevent charging restart after top-off timer expires
+	 */
+	s2mu004_update_reg(charger->i2c, S2MU004_CHG_CTRL7, 0x0 << 7, EN_CHG_RESTART_MASK);
+	s2mu004_read_reg(charger->i2c, S2MU004_CHG_CTRL7, &temp);
+	pr_info("%s : S2MU004_CHG_CTRL7 : 0x%x\n", __func__, temp);
+#endif
 
 	return true;
 }

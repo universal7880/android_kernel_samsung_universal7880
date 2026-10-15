@@ -83,7 +83,7 @@ config MULTI_CHARGING
 	Say Y to include support for multi charger ICs
 	
 config BATTERY_AGE_FORECAST
-	bool "battery age forecast"
+	tristate "battery age forecast"
 	default n
 	help
 	Say Y to use enable age forecast algorithm.
@@ -472,6 +472,13 @@ config CHARGER_S2MU004
 	 Say Y here to enable support for the S2MU004 charger.
 	 S2MU004 includes pmic, led, haptic, flash.
 	 You have to define MFD_S2MU004
+
+config S2MU004_MODE_CHANGE_BY_TOPOFF
+	bool "S2MU004 fuel-gauge mode switching by topoff current"
+	depends on SOC_EXYNOS7880 && FUELGAUGE_S2MU004 && CHARGER_S2MU004
+	help
+	  Use the Exynos7880 battery tuning tables and the charger's
+	  topoff current to select the fuel-gauge measurement mode.
 
 config CHARGER_S2MU005
 	tristate "S2MU005 charger support"
