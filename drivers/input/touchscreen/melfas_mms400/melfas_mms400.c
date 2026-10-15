@@ -1262,6 +1262,11 @@ static int mms_init_config(struct mms_ts_info *info)
 /**
  * Initialize driver
  */
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data);
+#endif
+
 static int mms_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct i2c_adapter *adapter = to_i2c_adapter(client->dev.parent);
@@ -1465,6 +1470,14 @@ static int mms_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	info->ic_status = PWR_ON;
 	tsp_debug_info(true, &client->dev,
 		"MELFAS " CHIP_NAME " Touchscreen is initialized successfully\n");
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+	info->fb_notif.notifier_call = fb_notifier_callback;
+	if (fb_register_client(&info->fb_notif))
+		dev_err(&client->dev, "Failed to register display notifier\n");
+	else
+		info->fb_notif_registered = true;
+#endif
+
 	return 0;
 
 
@@ -1524,6 +1537,12 @@ void trustedui_mode_on(void)
 static int mms_remove(struct i2c_client *client)
 {
 	struct mms_ts_info *info = i2c_get_clientdata(client);
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+	if (info->fb_notif_registered)
+		fb_unregister_client(&info->fb_notif);
+#endif
+
 
 	if (info->irq >= 0) {
 		free_irq(info->irq, info);
@@ -1657,3 +1676,33 @@ MODULE_DESCRIPTION("MELFAS MMS400 Touchscreen");
 MODULE_VERSION("2014.12.05");
 MODULE_AUTHOR("Jee, SangWon <jeesw@melfas.com>");
 MODULE_LICENSE("GPL");
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	struct mms_ts_info *info = container_of(self, struct mms_ts_info, fb_notif);
+	int blank;
+
+	if (event != FB_EVENT_BLANK || !evdata || !evdata->data)
+		return NOTIFY_DONE;
+
+	blank = *(int *)evdata->data;
+	switch (blank) {
+	case FB_BLANK_UNBLANK:
+	case FB_BLANK_NORMAL:
+	case FB_BLANK_VSYNC_SUSPEND:
+	case FB_BLANK_HSYNC_SUSPEND:
+		mms_input_open(info->input_dev);
+		break;
+	case FB_BLANK_POWERDOWN:
+		mms_input_close(info->input_dev);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+#endif

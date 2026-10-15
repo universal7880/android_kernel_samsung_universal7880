@@ -8,6 +8,10 @@
 #ifndef __MELFAS_MMS400_H
 #define __MELFAS_MMS400_H
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
+#endif
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/kobject.h>
@@ -332,6 +336,11 @@ struct mms_ts_info {
 	bool dt2w_enable;
 #endif
 	unsigned int comm_err_count;
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+	struct notifier_block fb_notif;
+	bool fb_notif_registered;
+#endif
+
 };
 
 enum IC_STATUS{
