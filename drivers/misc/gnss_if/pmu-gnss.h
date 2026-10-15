@@ -14,7 +14,7 @@
 
 #include "gnss_prj.h"
 
-#ifdef CONFIG_SOC_EXYNOS7870
+#if defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_SOC_EXYNOS7880)
 /* BLK_ALIVE: GNSS related SFRs */
 #define EXYNOS_PMU_GNSS_CTRL_NS			0x0040
 #define EXYNOS_PMU_GNSS_CTRL_S			0x0044
@@ -23,6 +23,11 @@
 #define EXYNOS_PMU_GNSS2AP_MEM_CONFIG		0x0090
 #define EXYNOS_PMU_GNSS2AP_MIF0_PERI_ACCESS_CON	0x0094
 #define EXYNOS_PMU_GNSS2AP_MIF1_PERI_ACCESS_CON	0x0098
+#ifdef CONFIG_SOC_EXYNOS7880
+#define EXYNOS_PMU_GNSS2AP_MIF2_PERI_ACCESS_CON	0x009C
+#define EXYNOS_PMU_GNSS2AP_MIF3_PERI_ACCESS_CON	0x00A0
+#endif
+
 #define EXYNOS_PMU_GNSS_BOOT_TEST_RST_CONFIG	0x00A8
 #define EXYNOS_PMU_GNSS2AP_PERI_ACCESS_WIN	0x00AC
 #define EXYNOS_PMU_GNSS_MODAPIF_CONFIG		0x00B0
@@ -78,7 +83,7 @@ enum gnss_tcxo_mode {
 	TCXO_NON_SHARED_MODE = 1,
 };
 
-#if defined(CONFIG_SOC_EXYNOS7870)
+#if defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_SOC_EXYNOS7880)
 struct gnss_ctl;
 extern int gnss_pmu_init_conf(struct gnss_ctl *);
 extern int gnss_pmu_hold_reset(struct gnss_ctl *);

@@ -500,6 +500,9 @@ static int parse_dt_mbox_pdata(struct device *dev, struct device_node *np,
 	mif_dt_read_u32 (np, "mbx_cp2ap_dvfsreq", mbox->mbx_cp2ap_perf_req);
 	mif_dt_read_u32 (np, "mbx_cp2ap_dvfsreq_cpu", mbox->mbx_cp2ap_perf_req_cpu);
 	mif_dt_read_u32 (np, "mbx_cp2ap_dvfsreq_mif", mbox->mbx_cp2ap_perf_req_mif);
+#ifdef CONFIG_SOC_EXYNOS7880
+	mif_dt_read_u32 (np, "mbx_cp2ap_evs_mode", mbox->mbx_cp2ap_evs_mode);
+#endif
 	mif_dt_read_u32 (np, "mbx_cp2ap_dvfsreq_int", mbox->mbx_cp2ap_perf_req_int);
 	mif_dt_read_u32 (np, "mbx_cp2ap_active", mbox->mbx_cp2ap_active);
 	mif_dt_read_u32 (np, "mbx_ap2cp_lock_value",

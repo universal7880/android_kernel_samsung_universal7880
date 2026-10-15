@@ -15,6 +15,9 @@
  */
 
 #include <linux/init.h>
+#ifdef CONFIG_SOC_EXYNOS7880
+#include <linux/clk.h>
+#endif
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
@@ -64,8 +67,20 @@ static struct gnss_ctl *create_gnssctl_device(struct platform_device *pdev)
 	gnssctl->gnss_data = pdata;
 	gnssctl->name = pdata->name;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	gnssctl->ccore_qch_lh_gnss = devm_clk_get(dev, "ccore_qch_lh_gnss");
+	if (IS_ERR(gnssctl->ccore_qch_lh_gnss))
+		gnssctl->ccore_qch_lh_gnss = NULL;
+#endif
+
+
 #ifdef USE_IOREMAP_NOPMU
+#ifdef CONFIG_SOC_EXYNOS7880
+	gnssctl->pmu_reg = devm_ioremap(dev, PMU_ADDR_7880, PMU_SIZE_7870);
+#else
 	gnssctl->pmu_reg = devm_ioremap(dev, PMU_ADDR_7870, PMU_SIZE_7870);
+#endif
+
 	if (gnssctl->pmu_reg == NULL) {
 		gif_err("%s: pmu ioremap failed.\n", pdata->name);
 		return NULL;

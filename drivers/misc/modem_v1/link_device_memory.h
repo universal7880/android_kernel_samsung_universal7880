@@ -330,6 +330,9 @@ struct mem_link_device {
 	struct work_struct pm_qos_work;
 	struct work_struct pm_qos_work_cpu;
 	struct work_struct pm_qos_work_mif;
+#ifdef CONFIG_SOC_EXYNOS7880
+	u32 requested_mif_clk;
+#endif
 	struct work_struct pm_qos_work_int;
 	
 	struct ect_table_data ect_table_data;	

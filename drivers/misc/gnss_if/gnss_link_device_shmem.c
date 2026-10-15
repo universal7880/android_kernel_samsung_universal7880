@@ -749,7 +749,12 @@ static int __init gnss_if_reserved_mem_setup(struct reserved_mem *remem)
 
    return 0;
 }
+#ifdef CONFIG_SOC_EXYNOS7880
+RESERVEDMEM_OF_DECLARE(gnss_if, "exynos,gnss_if", gnss_if_reserved_mem_setup);
+#else
 RESERVEDMEM_OF_DECLARE(gnss_if, "exynos7870,gnss_if", gnss_if_reserved_mem_setup);
+#endif
+
 #endif
 
 struct link_device *gnss_shmem_create_link_device(struct platform_device *pdev)

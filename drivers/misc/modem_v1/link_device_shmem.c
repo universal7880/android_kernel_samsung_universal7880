@@ -2415,10 +2415,16 @@ static void shmem_qos_work_mif(struct work_struct *work)
 	if (mif_val > 0 && mif_val <= mld->ect_table_data.ect_table[MIF_TABLE].num_of_table) {
 		mif_err("Lock MIF[%d] : %u\n", mif_val,
 				mld->ect_table_data.ect_table[MIF_TABLE].freq[mif_val - 1]);
+#ifdef CONFIG_SOC_EXYNOS7880
+		mld->requested_mif_clk = mld->ect_table_data.ect_table[MIF_TABLE].freq[mif_val - 1];
+#endif
 		pm_qos_update_request(&pm_qos_req_mif,
 				mld->ect_table_data.ect_table[MIF_TABLE].freq[mif_val - 1]);
 	} else {
 		mif_err("Unlock MIF(req_val : %d)\n", qos_val);
+#ifdef CONFIG_SOC_EXYNOS7880
+		mld->requested_mif_clk = 0;
+#endif
 		pm_qos_update_request(&pm_qos_req_mif, 0);
 	}
 }
@@ -2915,6 +2921,9 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 		mif_err("packet log device create fail\n");
 
 	mld->syscp_info = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+#ifdef CONFIG_SOC_EXYNOS7880
+	modem->mld = mld;
+#endif
 
 	mif_info("---\n");
 	return ld;

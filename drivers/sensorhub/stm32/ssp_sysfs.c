@@ -1175,6 +1175,9 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 static struct file_operations ssp_batch_fops = {
 	.owner = THIS_MODULE,
 	.open = nonseekable_open,
+#ifdef CONFIG_SOC_EXYNOS7880
+	.unlocked_ioctl = ssp_batch_ioctl,
+#endif
 	.compat_ioctl = ssp_batch_ioctl,
 };
 
@@ -1218,6 +1221,9 @@ err_batch_io_dev:
 
 void remove_sysfs(struct ssp_data *data)
 {
+#ifdef CONFIG_SOC_EXYNOS7880
+	ssp_batch_fops.unlocked_ioctl = NULL;
+#endif
 	ssp_batch_fops.compat_ioctl = NULL;
 	misc_deregister(&data->batch_io_device);
 	remove_accel_factorytest(data);

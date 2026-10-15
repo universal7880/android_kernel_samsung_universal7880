@@ -372,6 +372,9 @@ struct modem_mbox {
 	/* Performance request */
 	unsigned int mbx_ap2cp_perf_req;
 	unsigned int mbx_cp2ap_perf_req;
+#ifdef CONFIG_SOC_EXYNOS7880
+	unsigned int mbx_cp2ap_evs_mode;
+#endif
 	unsigned int mbx_cp2ap_perf_req_cpu;
 	unsigned int mbx_cp2ap_perf_req_mif;
 	unsigned int mbx_cp2ap_perf_req_int;
@@ -397,6 +400,9 @@ struct modem_mbox {
 
 /* platform data */
 struct modem_data {
+#ifdef CONFIG_SOC_EXYNOS7880
+	struct mem_link_device *mld;
+#endif
 	char *name;
 
 	unsigned int gpio_cp_on;

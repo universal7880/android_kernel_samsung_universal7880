@@ -292,6 +292,10 @@ int gnss_pmu_init_conf(struct gnss_ctl *gc)
 			0x0);
 	regmap_write(gc->pmu_reg, EXYNOS_PMU_GNSS2AP_MIF1_PERI_ACCESS_CON,
 			0x0);
+#ifdef CONFIG_SOC_EXYNOS7880
+	regmap_write(gc->pmu_reg, EXYNOS_PMU_GNSS2AP_MIF2_PERI_ACCESS_CON, 0x0);
+	regmap_write(gc->pmu_reg, EXYNOS_PMU_GNSS2AP_MIF3_PERI_ACCESS_CON, 0x0);
+#endif
 	regmap_write(gc->pmu_reg, EXYNOS_PMU_GNSS2AP_PERI_ACCESS_WIN,
 			0x0);
 #endif

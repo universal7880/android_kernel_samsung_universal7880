@@ -641,6 +641,9 @@ struct modem_ctl {
 	unsigned int mbx_cp_wakeup;
 	unsigned int mbx_cp_status;
 	unsigned int mbx_perf_req;
+#ifdef CONFIG_SOC_EXYNOS7880
+	unsigned int mbx_evs_mode;
+#endif
 
 	/* for checking aliveness of CP */
 	struct modem_irq irq_cp_wdt;		/* watchdog timer */

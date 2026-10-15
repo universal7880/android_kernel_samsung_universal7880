@@ -26,6 +26,9 @@
 
 #include "modem_prj.h"
 #include "modem_utils.h"
+#ifdef CONFIG_SOC_EXYNOS7880
+#include "link_device_memory.h"
+#endif
 
 #include <linux/modem_notifier.h>
 
@@ -396,6 +399,33 @@ int ss310ap_force_crash_exit_ext(void)
 	return 0;
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+u32 ss310ap_get_evs_mode_ext(void)
+{
+	u32 evs_mode = 0;
+	u32 requested_mif_clk = 0;
+	struct modem_data *modem;
+	struct mem_link_device *mld;
+
+	if (g_mc) {
+		modem = g_mc->mdm_data;
+		evs_mode = mbox_get_value(MCU_CP, g_mc->mbx_evs_mode);
+
+		if (modem) {
+			mld = modem->mld;
+			if (evs_mode && mld)
+				requested_mif_clk = mld->requested_mif_clk;
+		}
+
+		mif_err("evs_mode:%u requested_mif_clk:%u\n", evs_mode,
+				requested_mif_clk);
+	}
+	return requested_mif_clk;
+}
+EXPORT_SYMBOL(ss310ap_get_evs_mode_ext);
+
+#endif
+
 static int ss310ap_dump_start(struct modem_ctl *mc)
 {
 	int err;
@@ -454,6 +484,9 @@ static void ss310ap_get_pdata(struct modem_ctl *mc, struct modem_data *modem)
 
 	mc->mbx_perf_req = mbx->mbx_cp2ap_perf_req;
 	mc->irq_perf_req = mbx->irq_cp2ap_perf_req;
+#ifdef CONFIG_SOC_EXYNOS7880
+	mc->mbx_evs_mode = mbx->mbx_cp2ap_evs_mode;
+#endif
 }
 
 #ifdef CONFIG_EXYNOS_BUSMONITOR

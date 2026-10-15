@@ -54,6 +54,10 @@ enum sensor_power {
 
 #define PMU_ADDR_7870		(0x10480000)
 #define PMU_SIZE_7870		(SZ_64K)
+#ifdef CONFIG_SOC_EXYNOS7880
+#define PMU_ADDR_7880		(0x106B0000)
+#endif
+
 
 struct kepler_bcmd_args {
 	u16 flags;
@@ -395,6 +399,9 @@ struct gnss_ctl {
 	struct pinctrl *gnss_gpio;
 	struct pinctrl_state *gnss_sensor_gpio;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	struct clk *ccore_qch_lh_gnss;
+#endif
 	struct regulator *vdd_sensor_reg;
 };
 
