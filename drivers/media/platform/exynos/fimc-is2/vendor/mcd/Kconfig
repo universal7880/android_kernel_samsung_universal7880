@@ -274,3 +274,16 @@ config CAMERA_5E6_USE_1P2_POWER
         default n
         help
           5E6 sensor use 1p2 power pin.
+
+config CAMERA_A7Y17
+        bool "This camera is A7 2017 project"
+        depends on VENDER_MCD && SOC_EXYNOS7880
+        default n
+        help
+          This camera is A7_2017 project.
+config CAMERA_A5Y17
+        bool "This camera is A5 2017 project"
+        depends on VENDER_MCD && SOC_EXYNOS7880
+        default n
+        help
+          This camera is A5_2017 project.

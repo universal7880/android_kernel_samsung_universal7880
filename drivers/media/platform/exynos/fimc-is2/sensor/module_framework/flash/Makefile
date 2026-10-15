@@ -8,3 +8,5 @@ EXTRA_CFLAGS += -Idrivers/media/platform/exynos/fimc-is2/vendor
 EXTRA_CFLAGS += -Idrivers/media/platform/exynos/fimc-is2/hardware/api
 EXTRA_CFLAGS += -Idrivers/media/platform/exynos/fimc-is2/sensor/module_framework
 EXTRA_CFLAGS += -Idrivers/media/platform/exynos/fimc-is2/sensor
+
+obj-$(CONFIG_CAMERA_FLASH_KTD2692_OBJ) += fimc-is-flash-ktd2692.o

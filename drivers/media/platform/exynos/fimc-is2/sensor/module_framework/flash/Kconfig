@@ -27,3 +27,11 @@ config CAMERA_FLASH_GPIO_OBJ
         default n
         help
           Use to build GPIO driver.
+
+config CAMERA_FLASH_KTD2692_OBJ
+        bool "Use KTD2692"
+	depends on USE_DIRECT_IS_CONTROL && SOC_EXYNOS7880
+	depends on CAMERA_FLASH_SELECT
+        default n
+        help
+          Use to build KTD2692 driver.

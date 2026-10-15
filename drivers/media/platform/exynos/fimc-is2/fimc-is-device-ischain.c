@@ -2254,8 +2254,8 @@ int fimc_is_ischain_runtime_suspend(struct device *dev)
 	CALL_MEMOP(mem, suspend, mem->default_ctx);
 
 #if defined(CONFIG_FIMC_IS_BUS_DEVFREQ) && defined(CONFIG_EXYNOS_BTS)
-/* Currently only 7870 use exynos_update_media_scenario */
-#if defined(CONFIG_EXYNOS7870_BTS)
+/* The 7870 and 7880 share the media bandwidth interface. */
+#if defined(CONFIG_EXYNOS7870_BTS) || defined(CONFIG_EXYNOS7880_BTS)
 	exynos_update_media_scenario(TYPE_CAM, false, 0);
 #else
 	exynos7_update_media_scenario(TYPE_CAM, false, 0);
@@ -2357,8 +2357,8 @@ int fimc_is_ischain_runtime_resume(struct device *dev)
 	CALL_MEMOP(mem, resume, mem->default_ctx);
 
 #if defined(CONFIG_FIMC_IS_BUS_DEVFREQ) && defined(CONFIG_EXYNOS_BTS)
-/* Currently only 7870 use exynos_update_media_scenario */
-#if defined(CONFIG_EXYNOS7870_BTS)
+/* The 7870 and 7880 share the media bandwidth interface. */
+#if defined(CONFIG_EXYNOS7870_BTS) || defined(CONFIG_EXYNOS7880_BTS)
 	exynos_update_media_scenario(TYPE_CAM, true, 0);
 #else
 	exynos7_update_media_scenario(TYPE_CAM, true, 0);

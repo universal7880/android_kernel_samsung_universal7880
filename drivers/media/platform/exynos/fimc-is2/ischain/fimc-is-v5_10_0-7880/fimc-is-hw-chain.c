@@ -884,70 +884,22 @@ int fimc_is_hw_request_irq(void *itfc_data, int hw_id)
 	return ret;
 }
 
-int fimc_is_hw_s_ctrl(void *itfc_data, int hw_id, enum hw_s_ctrl_id id, void *val)
+int fimc_is_hw_set_fullbypass(void *itfc_data, int hw_id, bool bypass)
 {
-	int ret = 0;
-
-	switch (id) {
-	case HW_S_CTRL_FULL_BYPASS:
-		/* nothing */
-		break;
-	case HW_S_CTRL_CHAIN_IRQ:
-		/* nothing */
-		break;
-	default:
-		break;
-	}
-
-	return ret;
+	return 0;
 }
 
-int fimc_is_hw_g_ctrl(void *itfc_data, int hw_id, enum hw_g_ctrl_id id, void *val)
+int fimc_is_hw_set_chain_interrupt(void *itfc_data)
 {
-	int ret = 0;
-
-	switch (id) {
-	case HW_G_CTRL_FRM_DONE_WITH_DMA:
-		*(bool *)val = true;
-		break;
-	case HW_G_CTRL_HAS_MCSC:
-		*(bool *)val = true;
-		break;
-	case HW_G_CTRL_HAS_VRA_CH1_ONLY:
-		*(bool *)val = false;
-		break;
-	}
-
-	return ret;
+	return 0;
 }
 
-int fimc_is_hw_query_cap(void *cap_data, int hw_id)
+bool fimc_is_has_mcsc(void)
 {
-	int ret = 0;
+	return true;
+}
 
-	BUG_ON(!cap_data);
-
-	switch (hw_id) {
-	case DEV_HW_MCSC0:
-		{
-			struct fimc_is_hw_mcsc_cap *cap = (struct fimc_is_hw_mcsc_cap *)cap_data;
-			/* v2.10 */
-			cap->hw_ver = HW_SET_VERSION(2, 10, 0, 0);
-			cap->max_output = 3;
-			cap->in_otf = MCSC_CAP_SUPPORT;
-			cap->in_dma = MCSC_CAP_SUPPORT;
-			cap->out_dma[0] = MCSC_CAP_SUPPORT;
-			cap->out_dma[1] = MCSC_CAP_SUPPORT;
-			cap->out_dma[2] = MCSC_CAP_SUPPORT;
-			cap->out_otf[0] = MCSC_CAP_SUPPORT;
-			cap->out_otf[1] = MCSC_CAP_SUPPORT;
-			cap->out_otf[2] = MCSC_CAP_SUPPORT;
-			cap->enable_shared_output = false;
-		}
-		break;
-	default:
-		break;
-	}
-
-	return ret;
+bool fimc_is_hw_frame_done_with_dma(void)
+{
+	return true; /* true after FIMC-IS V4.x */
 }

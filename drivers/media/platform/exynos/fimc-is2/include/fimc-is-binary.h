@@ -71,7 +71,11 @@
 #define VRA_LIB_SIZE		(SZ_512K)
 
 #define DDK_LIB_ADDR		(VRA_LIB_ADDR + VRA_LIB_SIZE)
+#ifdef CONFIG_SOC_EXYNOS7880
+#define DDK_LIB_SIZE		(SZ_8M)
+#else
 #define DDK_LIB_SIZE		(SZ_2M + SZ_1M)
+#endif
 
 #define LIB_SIZE		(VRA_LIB_SIZE + DDK_LIB_SIZE)
 

@@ -465,8 +465,9 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 			 * For supporting multi input to single output.
 			 * But this function is not supported in full OTF chain.
 			 */
-			if (device->group_mcs.head)
-				head = device->group_mcs.head;
+			/* Q stores the OTF chain head in parent. */
+			if (device->group_mcs.parent)
+				head = device->group_mcs.parent;
 			else
 				head = &device->group_mcs;
 

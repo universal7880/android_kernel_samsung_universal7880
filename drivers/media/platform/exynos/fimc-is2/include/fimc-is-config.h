@@ -9,6 +9,9 @@
  * published by the Free Software Foundation.
  */
 
+#ifdef CONFIG_SOC_EXYNOS7880
+#include "../ischain/fimc-is-v5_10_0-7880/fimc-is-config.h"
+#else
 #ifndef FIMC_IS_CONFIG_H
 #define FIMC_IS_CONFIG_H
 
@@ -856,3 +859,5 @@
 #endif
 
 #endif
+
+#endif /* CONFIG_SOC_EXYNOS7880 */

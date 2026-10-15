@@ -13,7 +13,10 @@
 #ifndef FIMC_IS_VENDOR_CONFIG_H
 #define FIMC_IS_VENDOR_CONFIG_H
 
-#if defined(CONFIG_CAMERA_J7X)
+#if defined(CONFIG_SOC_EXYNOS7880) && \
+    (defined(CONFIG_CAMERA_A5Y17) || defined(CONFIG_CAMERA_A7Y17))
+#include "fimc-is-vendor-config_a5a7y17.h"
+#elif defined(CONFIG_CAMERA_J7X)
 #include "fimc-is-vendor-config_j7x.h"
 #elif defined(CONFIG_CAMERA_ON7X)
 #include "fimc-is-vendor-config_on7x.h"

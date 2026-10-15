@@ -113,8 +113,14 @@
 				 (mfc_version(dev) == 0x78))
 #define IS_MFCv8X(dev)		(mfc_version(dev) == 0x80)
 #define IS_MFCv9X(dev)		(mfc_version(dev) == 0x90)
+#ifdef CONFIG_SOC_EXYNOS7880
+#define IS_MFCv10X(dev)		((mfc_version(dev) == 0xA01) || \
+				 (mfc_version(dev) == 0xA0A0) || \
+				 (mfc_version(dev) == 0xA0B0))
+#else
 #define IS_MFCv10X(dev)		((mfc_version(dev) == 0xA01) || \
 				 (mfc_version(dev) == 0xA0B0))
+#endif
 #define IS_MFCv78(dev)		(mfc_version(dev) == 0x78)
 #define IS_MFCv101(dev)		(mfc_version(dev) == 0xA01)
 #define IS_MFCV6(dev)		(IS_MFCv6X(dev) || IS_MFCv7X(dev) ||	\
@@ -243,6 +249,9 @@ static inline unsigned int mfc_linear_buf_size(unsigned int version)
 	case 0xA0:
 	case 0xA01:
 	case 0xA0B0:
+#ifdef CONFIG_SOC_EXYNOS7880
+	case 0xA0A0:
+#endif
 		size = 256;
 		break;
 	default:
@@ -296,6 +305,11 @@ static inline unsigned int mfc_version(struct s5p_mfc_dev *dev)
 	case IP_VER_MFC_7J_0:
 		version = 0xA0B0;
 		break;
+#ifdef CONFIG_SOC_EXYNOS7880
+	case IP_VER_MFC_7J_1:
+		version = 0xA0A0;
+		break;
+#endif
 	}
 
 	return version;
