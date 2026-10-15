@@ -1014,8 +1014,16 @@ extern void set_grip_data_to_ic(struct sec_ts_data *ts, u8 flag);
 extern void sec_ts_set_grip_type(struct sec_ts_data *ts, u8 set_type);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+#ifdef CONFIG_SOC_EXYNOS7880
+extern void sec_ts_trustedui_mode_on(void);
+#else
 extern void trustedui_mode_on(void);
+#endif
+#ifdef CONFIG_SOC_EXYNOS7880
+extern void sec_ts_trustedui_mode_off(void);
+#else
 extern void trustedui_mode_off(void);
+#endif
 extern int tui_force_close(uint32_t arg);
 #endif
 

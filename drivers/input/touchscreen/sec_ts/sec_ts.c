@@ -3313,7 +3313,11 @@ static int sec_ts_pm_resume(struct device *dev)
 #endif
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+#ifdef CONFIG_SOC_EXYNOS7880
+void sec_ts_trustedui_mode_on(void)
+#else
 void trustedui_mode_on(void)
+#endif
 {
 	if (!tsp_info)
 		return;
@@ -3321,7 +3325,11 @@ void trustedui_mode_on(void)
 	sec_ts_unlocked_release_all_finger(tsp_info);
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+void sec_ts_trustedui_mode_off(void)
+#else
 void trustedui_mode_off(void)
+#endif
 {
 	if (!tsp_info)
 		return;

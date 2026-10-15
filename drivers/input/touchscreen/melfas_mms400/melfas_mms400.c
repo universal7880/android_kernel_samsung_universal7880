@@ -17,7 +17,11 @@ struct wake_lock mms_wake_lock;
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 extern int tui_force_close(uint32_t arg);
+#ifdef CONFIG_SOC_EXYNOS7880
+static struct mms_ts_info *tui_tsp_info;
+#else
 struct mms_ts_info *tui_tsp_info;
+#endif
 #endif
 /**
  * Reboot chip
@@ -1489,7 +1493,12 @@ ERROR:
 }
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-void trustedui_mode_on(void){
+#ifdef CONFIG_SOC_EXYNOS7880
+void melfas_trustedui_mode_on(void)
+#else
+void trustedui_mode_on(void)
+#endif
+{
 	dev_err(&tui_tsp_info->client->dev, "%s, release all finger..\n",	__func__);
 	mms_clear_input(tui_tsp_info);
 }

@@ -18,6 +18,9 @@
 
 #undef TSP_VERBOSE_DEBUG
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_TRUSTONIC_TRUSTED_UI)
+#include <linux/trustedui.h>
+#endif
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
@@ -936,6 +939,10 @@ static struct miscdevice touch_misc_device = {
 #endif
 
 struct bt532_ts_info *misc_info;
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_TRUSTONIC_TRUSTED_UI)
+static struct bt532_ts_info *tui_tsp_info;
+#endif
+
 
 static void bt532_set_optional_mode(struct bt532_ts_info *info, bool force)
 {
@@ -2081,6 +2088,32 @@ static void clear_report_data(struct bt532_ts_info *info)
 #define	PALM_REPORT_WIDTH	200
 #define	PALM_REJECT_WIDTH	255
 
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_TRUSTONIC_TRUSTED_UI)
+bool zinitix_trustedui_active(void)
+{
+	return tui_tsp_info != NULL;
+}
+
+void zinitix_trustedui_mode_on(void){
+	input_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
+	clear_report_data(tui_tsp_info);
+	input_info(true, &tui_tsp_info->client->dev, "%s : esd timer disable", __func__);
+#if ESD_TIMER_INTERVAL
+	esd_timer_stop(tui_tsp_info);
+	write_reg(tui_tsp_info->client, BT532_PERIODICAL_INTERRUPT_INTERVAL, 0);
+#endif
+}
+
+void trustedui_mode_off(void){
+	input_info(true, &tui_tsp_info->client->dev, "%s : esd timer enable", __func__);
+#if ESD_TIMER_INTERVAL
+	write_reg(tui_tsp_info->client, BT532_PERIODICAL_INTERRUPT_INTERVAL,
+		SCAN_RATE_HZ * ESD_TIMER_INTERVAL);
+	esd_timer_start(CHECK_ESD_TIMER, tui_tsp_info);
+#endif
+}
+#endif
 
 static irqreturn_t bt532_touch_work(int irq, void *data)
 {
@@ -5777,6 +5810,11 @@ static int bt532_ts_probe(struct i2c_client *client,
 				VBUS_NOTIFY_DEV_CHARGER);
 #endif
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_TRUSTONIC_TRUSTED_UI)
+	tui_tsp_info = info;
+	trustedui_set_tsp_irq(info->irq);
+#endif
+
 	return 0;
 
 #ifdef SEC_FACTORY_TEST
@@ -5815,6 +5853,10 @@ static int bt532_ts_remove(struct i2c_client *client)
 {
 	struct bt532_ts_info *info = i2c_get_clientdata(client);
 	struct bt532_ts_platform_data *pdata = info->pdata;
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_TRUSTONIC_TRUSTED_UI)
+	tui_tsp_info = NULL;
+#endif
 
 	disable_irq(info->irq);
 	down(&info->work_lock);

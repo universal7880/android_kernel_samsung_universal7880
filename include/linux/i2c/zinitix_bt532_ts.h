@@ -19,6 +19,13 @@
 #ifndef _LINUX_BT532_TS_H
 #define _LINUX_BT532_TS_H
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_TRUSTONIC_TRUSTED_UI)
+bool zinitix_trustedui_active(void);
+void zinitix_trustedui_mode_on(void);
+void zinitix_trustedui_mode_off(void);
+#endif
+
+
 #define TS_DRVIER_VERSION	"1.0.18_1"
 
 #define BT532_TS_DEVICE		"bt532_ts_device"
@@ -82,6 +89,7 @@
 		}	\
 		sec_debug_tsp_log(fmt, ## args); \
 	} while (0);
+
 
 #define zinitix_printk(fmt, args...) \
 	do { \
