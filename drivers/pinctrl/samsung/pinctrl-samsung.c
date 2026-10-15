@@ -1960,6 +1960,10 @@ static const struct of_device_id samsung_pinctrl_dt_match[] = {
 		.data = (void *)exynos5420_pin_ctrl },
 	{ .compatible = "samsung,s5pv210-pinctrl",
 		.data = (void *)s5pv210_pin_ctrl },
+#ifdef CONFIG_SOC_EXYNOS7880
+	{ .compatible = "samsung,exynos7880-pinctrl",
+		.data = (void *)exynos7880_pin_ctrl },
+#endif
 	{ .compatible = "samsung,exynos7870-pinctrl",
 		.data = (void *)exynos7870_pin_ctrl },
 	{ .compatible = "samsung,exynos8890-pinctrl",
