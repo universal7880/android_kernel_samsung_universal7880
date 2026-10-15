@@ -55,6 +55,18 @@ config ARM64_RANDOMIZE_TEXT_OFFSET
 	  of TEXT_OFFSET and platforms must not require a specific
 	  value.
 
+config TEXT_OFFSET_OVERRIDE
+	bool "Override the kernel text offset"
+	depends on SOC_EXYNOS7880 && !ARM64_RANDOMIZE_TEXT_OFFSET
+	help
+	  Allow platforms which reserve memory below the kernel image to
+	  specify the load offset required by their bootloader.
+
+config TEXT_OFFSET
+	hex "Kernel text offset"
+	depends on TEXT_OFFSET_OVERRIDE
+	default 0x00080000
+
 config DEBUG_SET_MODULE_RONX
         bool "Set loadable kernel module data as NX and text as RO"
         depends on MODULES
