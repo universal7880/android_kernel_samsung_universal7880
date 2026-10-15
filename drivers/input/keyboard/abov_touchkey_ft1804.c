@@ -15,6 +15,10 @@
  *
  */
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
+#endif
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/gpio.h>
@@ -198,6 +202,11 @@ struct abov_tk_info {
 	int light_table_crc;
 	u8 light_reg;
 #endif
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+	struct notifier_block fb_notif;
+	bool fb_notif_registered;
+#endif
+
 };
 
 
@@ -3163,6 +3172,11 @@ static int abov_parse_dt(struct device *dev,
 }
 #endif
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data);
+#endif
+
 static int abov_tk_probe(struct i2c_client *client,
 				  const struct i2c_device_id *id)
 {
@@ -3431,6 +3445,14 @@ static int abov_tk_probe(struct i2c_client *client,
 	schedule_delayed_work(&info->efs_open_work, msecs_to_jiffies(2000));
 #endif
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+	info->fb_notif.notifier_call = fb_notifier_callback;
+	if (fb_register_client(&info->fb_notif))
+		dev_err(&client->dev, "Failed to register display notifier\n");
+	else
+		info->fb_notif_registered = true;
+#endif
+
 	return 0;
 
 err_req_irq:
@@ -3484,6 +3506,12 @@ static void led_twinkle_work(struct work_struct *work)
 static int abov_tk_remove(struct i2c_client *client)
 {
 	struct abov_tk_info *info = i2c_get_clientdata(client);
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+	if (info->fb_notif_registered)
+		fb_unregister_client(&info->fb_notif);
+#endif
+
 
 /*	if (info->enabled)
 		info->pdata->power(0);
@@ -3753,3 +3781,33 @@ module_exit(touchkey_exit);
 MODULE_AUTHOR("Samsung Electronics");
 MODULE_DESCRIPTION("Touchkey driver for Abov MF18xx chip");
 MODULE_LICENSE("GPL");
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	struct abov_tk_info *info = container_of(self, struct abov_tk_info, fb_notif);
+	int blank;
+
+	if (event != FB_EVENT_BLANK || !evdata || !evdata->data)
+		return NOTIFY_DONE;
+
+	blank = *(int *)evdata->data;
+	switch (blank) {
+	case FB_BLANK_UNBLANK:
+	case FB_BLANK_NORMAL:
+	case FB_BLANK_VSYNC_SUSPEND:
+	case FB_BLANK_HSYNC_SUSPEND:
+		abov_tk_input_open(info->input_dev);
+		break;
+	case FB_BLANK_POWERDOWN:
+		abov_tk_input_close(info->input_dev);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+#endif
