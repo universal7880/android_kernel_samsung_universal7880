@@ -425,8 +425,14 @@ static const struct sc_fmt sc_formats[] = {
 
 /* must specify in revers order of SCALER_VERSION(xyz) */
 static const u32 sc_version_table[][2] = {
+#ifdef CONFIG_SOC_EXYNOS7880
+	{ 0x80063000, SCALER_VERSION(4, 2, 0) }, /* SC_BI */
+#endif
 	{ 0x80062004, SCALER_VERSION(4, 2, 0) }, /* SC_BI */
 	{ 0x80060007, SCALER_VERSION(4, 2, 0) }, /* SC_BI */
+#ifdef CONFIG_SOC_EXYNOS7880
+	{ 0x80053000, SCALER_VERSION(4, 0, 0) }, /* SC_POLY */
+#endif
 	{ 0x80052004, SCALER_VERSION(4, 0, 0) }, /* SC_POLY */
 	{ 0x80050007, SCALER_VERSION(4, 0, 0) }, /* SC_POLY */
 	{ 0xA000000B, SCALER_VERSION(3, 0, 2) },
