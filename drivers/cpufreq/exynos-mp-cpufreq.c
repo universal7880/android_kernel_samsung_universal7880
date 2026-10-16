@@ -1566,6 +1566,15 @@ static int exynos_cpufreq_pm_notifier(struct notifier_block *notifier,
 	return NOTIFY_OK;
 err:
 	pr_err("%s: failed to set voltage\n", __func__);
+#ifdef CONFIG_EXYNOS_CL_DVFS_CPU
+	exynos_cl_dvfs_start(CLUSTER_ID(cl));
+#endif
+	/* A failed prepare notifier does not receive PM_POST_SUSPEND. */
+	mutex_lock(&cpufreq_lock);
+	for_each_cluster(cl)
+		exynos_info[cl]->blocked = false;
+	mutex_unlock(&cpufreq_lock);
+	pm_qos_update_request(&boot_max_qos[CL_ONE], INT_MAX);
 
 	return NOTIFY_BAD;
 }
