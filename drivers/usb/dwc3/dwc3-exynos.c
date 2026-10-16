@@ -779,8 +779,10 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_TYPEC)
 		typec = devm_kzalloc(dev, sizeof(*typec), GFP_KERNEL);
-		if (!typec)
-			return -ENOMEM;
+		if (!typec) {
+			ret = -ENOMEM;
+			goto err5;
+		}
 
 		/* mutex_init(&md05->lock); */
 		typec->dev = dev;
@@ -790,8 +792,10 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 		typec->cap.prefer_role = TYPEC_NO_PREFERRED_ROLE;
 
 		typec->port = typec_register_port(dev, &typec->cap);
-		if (!typec->port)
-			return -ENODEV;
+		if (!typec->port) {
+			ret = -ENODEV;
+			goto err5;
+		}
 
 		typec_set_data_role(typec->port, TYPEC_DEVICE);
 		typec_set_pwr_role(typec->port, TYPEC_SINK);
@@ -801,6 +805,7 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 	return 0;
 
 err5:
+	device_for_each_child(dev, NULL, dwc3_exynos_remove_child);
 	platform_device_unregister(exynos->usb2_phy);
 	platform_device_unregister(exynos->usb3_phy);
 err4:
