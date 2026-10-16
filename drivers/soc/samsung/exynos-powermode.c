@@ -325,6 +325,11 @@ void exynos_get_idle_ip_list(char *(*idle_ip_list)[IDLE_IP_REG_SIZE])
 
 static DEFINE_SPINLOCK(c2_lock);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+/* CPUs being started are not yet covered by cpu_online_mask. */
+static struct cpumask cpu_up_mask;
+#endif
+
 static void update_c2_state(bool down, unsigned int cpu)
 {
 	if (down)
@@ -397,6 +402,11 @@ static int is_cpd_available(unsigned int cpu)
 {
 	struct cpumask mask;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (!cpumask_empty(&cpu_up_mask))
+		return false;
+#endif
+
 	if (pm_info->cpd_blocked)
 		return false;
 
@@ -461,6 +471,11 @@ static inline bool is_jig_attached(void)
 static int is_sicd_available(unsigned int cpu)
 {
 	int index;
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (!cpumask_empty(&cpu_up_mask))
+		return false;
+#endif
 
 	if (!pm_info->sicd_enabled)
 		return false;
@@ -811,24 +826,43 @@ void exynos_wakeup_cp_call(bool early_wakeup)
  * even each cpu wake up through hotplug in.
  */
 static int exynos_cpuidle_hotcpu_callback(struct notifier_block *nfb,
-                                       unsigned long action, void *hcpu)
+					unsigned long action, void *hcpu)
 {
-       unsigned int cpu = (unsigned long)hcpu;
-       int ret = NOTIFY_OK;
+	unsigned int cpu = (unsigned long)hcpu;
+	int ret = NOTIFY_OK;
+#ifdef CONFIG_SOC_EXYNOS7880
+	unsigned long flags;
+#endif
 
-       switch (action) {
-       case CPU_STARTING:
-       case CPU_STARTING_FROZEN:
-               spin_lock(&c2_lock);
+	switch (action) {
+#ifdef CONFIG_SOC_EXYNOS7880
+	case CPU_UP_PREPARE:
+	case CPU_UP_PREPARE_FROZEN:
+		spin_lock_irqsave(&c2_lock, flags);
+		cpumask_set_cpu(cpu, &cpu_up_mask);
+		spin_unlock_irqrestore(&c2_lock, flags);
+		break;
+	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
+	case CPU_UP_CANCELED:
+	case CPU_UP_CANCELED_FROZEN:
+		spin_lock_irqsave(&c2_lock, flags);
+		cpumask_clear_cpu(cpu, &cpu_up_mask);
+		spin_unlock_irqrestore(&c2_lock, flags);
+		break;
+#endif
+	case CPU_STARTING:
+	case CPU_STARTING_FROZEN:
+		spin_lock(&c2_lock);
 
-               if (!is_cpu_boot_cluster(cpu))
-                       exynos_cpu.cluster_up(get_cluster_id(cpu));
+		if (!is_cpu_boot_cluster(cpu))
+			exynos_cpu.cluster_up(get_cluster_id(cpu));
 
-               spin_unlock(&c2_lock);
-               break;
-       }
+		spin_unlock(&c2_lock);
+		break;
+	}
 
-       return ret;
+	return ret;
 }
 
 static struct notifier_block __refdata cpuidle_hotcpu_notifier = {
