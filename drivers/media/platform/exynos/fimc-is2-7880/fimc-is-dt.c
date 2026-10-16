@@ -512,8 +512,13 @@ static int parse_internal_vc_data(struct exynos_platform_fimc_is_module *pdata, 
 	int i;
 	u32 ch = 0;
 
-	vc_count = of_property_count_elems_of_size(dnode, "vc_list", sizeof(u32)) / 2;
-	if (vc_count >= CSI_VIRTUAL_CH_MAX) {
+	vc_count = of_property_count_elems_of_size(dnode, "vc_list", sizeof(u32));
+	if (vc_count < 0)
+		return vc_count;
+	if (vc_count % 2)
+		return -EINVAL;
+	vc_count /= 2;
+	if (vc_count > CSI_VIRTUAL_CH_MAX) {
 		probe_err("vc_list exceed to csi ch max(%d)", vc_count);
 		return -EINVAL;
 	}
@@ -525,6 +530,9 @@ static int parse_internal_vc_data(struct exynos_platform_fimc_is_module *pdata, 
 			probe_err("internal vc read fail(%d)", ret);
 			return ret;
 		}
+
+		if (ch >= CSI_VIRTUAL_CH_MAX)
+			return -EINVAL;
 
 		/* parse internal vc type info */
 		ret = of_property_read_u32_index(dnode, "vc_list", i * 2 + 1, &pdata->internal_vc[ch]);
@@ -600,42 +608,58 @@ int fimc_is_sensor_module_parse_dt(struct platform_device *pdev,
 		goto p_err;
 	}
 
-	af_np = of_find_node_by_name(dnode, "af");
+	af_np = of_get_child_by_name(dnode, "af");
 	if (!af_np) {
 		pdata->af_product_name = ACTUATOR_NAME_NOTHING;
 	} else {
-		parse_af_data(pdata, af_np);
+		ret = parse_af_data(pdata, af_np);
+		of_node_put(af_np);
+		if (ret)
+			goto p_err;
 	}
 
-	flash_np = of_find_node_by_name(dnode, "flash");
+	flash_np = of_get_child_by_name(dnode, "flash");
 	if (!flash_np) {
 		pdata->flash_product_name = FLADRV_NAME_NOTHING;
 	} else {
-		parse_flash_data(pdata, flash_np);
+		ret = parse_flash_data(pdata, flash_np);
+		of_node_put(flash_np);
+		if (ret)
+			goto p_err;
 	}
 
-	preprocessor_np = of_find_node_by_name(dnode, "preprocessor");
+	preprocessor_np = of_get_child_by_name(dnode, "preprocessor");
 	if (!preprocessor_np) {
 		pdata->preprocessor_product_name = PREPROCESSOR_NAME_NOTHING;
 	} else {
-		parse_preprocessor_data(pdata, preprocessor_np);
+		ret = parse_preprocessor_data(pdata, preprocessor_np);
+		of_node_put(preprocessor_np);
+		if (ret)
+			goto p_err;
 	}
 
-	ois_np = of_find_node_by_name(dnode, "ois");
+	ois_np = of_get_child_by_name(dnode, "ois");
 	if (!ois_np) {
 		pdata->ois_product_name = OIS_NAME_NOTHING;
 	} else {
-		parse_ois_data(pdata, ois_np);
+		ret = parse_ois_data(pdata, ois_np);
+		of_node_put(ois_np);
+		if (ret)
+			goto p_err;
 	}
 
 	pdata->power_seq_dt = of_property_read_bool(dnode, "use_power_seq");
 	if(pdata->power_seq_dt == true) {
-		power_np = of_find_node_by_name(dnode, "power_seq");
+		power_np = of_get_child_by_name(dnode, "power_seq");
 		if (!power_np) {
 			probe_err("power sequence is not declared to DT");
+			ret = -EINVAL;
 			goto p_err;
 		} else {
-			parse_power_seq_data(pdata, power_np);
+			ret = parse_power_seq_data(pdata, power_np);
+			of_node_put(power_np);
+			if (ret)
+				goto p_err;
 		}
 	} else {
 		ret = module_callback(pdev, pdata);
@@ -648,6 +672,7 @@ int fimc_is_sensor_module_parse_dt(struct platform_device *pdev,
 	pdata->pinctrl = devm_pinctrl_get(dev);
 	if (IS_ERR(pdata->pinctrl)) {
 		probe_err("devm_pinctrl_get is fail");
+		ret = PTR_ERR(pdata->pinctrl);
 		goto p_err;
 	}
 
@@ -657,9 +682,13 @@ int fimc_is_sensor_module_parse_dt(struct platform_device *pdev,
 		goto p_err;
 	}
 
-	internal_vc_np = of_find_node_by_name(dnode, "internal_vc");
-	if (internal_vc_np)
-		parse_internal_vc_data(pdata, internal_vc_np);
+	internal_vc_np = of_get_child_by_name(dnode, "internal_vc");
+	if (internal_vc_np) {
+		ret = parse_internal_vc_data(pdata, internal_vc_np);
+		of_node_put(internal_vc_np);
+		if (ret)
+			goto p_err;
+	}
 
 	dev->platform_data = pdata;
 
@@ -725,32 +754,44 @@ int fimc_is_module_parse_dt(struct device *dev,
 		goto p_err;
 	}
 
-	af_np = of_find_node_by_name(dnode, "af");
+	af_np = of_get_child_by_name(dnode, "af");
 	if (!af_np) {
 		pdata->af_product_name = ACTUATOR_NAME_NOTHING;
 	} else {
-		parse_af_data(pdata, af_np);
+		ret = parse_af_data(pdata, af_np);
+		of_node_put(af_np);
+		if (ret)
+			goto p_err;
 	}
 
-	flash_np = of_find_node_by_name(dnode, "flash");
+	flash_np = of_get_child_by_name(dnode, "flash");
 	if (!flash_np) {
 		pdata->flash_product_name = FLADRV_NAME_NOTHING;
 	} else {
-		parse_flash_data(pdata, flash_np);
+		ret = parse_flash_data(pdata, flash_np);
+		of_node_put(flash_np);
+		if (ret)
+			goto p_err;
 	}
 
-	preprocessor_np = of_find_node_by_name(dnode, "preprocessor");
+	preprocessor_np = of_get_child_by_name(dnode, "preprocessor");
 	if (!preprocessor_np) {
 		pdata->preprocessor_product_name = PREPROCESSOR_NAME_NOTHING;
 	} else {
-		parse_preprocessor_data(pdata, preprocessor_np);
+		ret = parse_preprocessor_data(pdata, preprocessor_np);
+		of_node_put(preprocessor_np);
+		if (ret)
+			goto p_err;
 	}
 
-	ois_np = of_find_node_by_name(dnode, "ois");
+	ois_np = of_get_child_by_name(dnode, "ois");
 	if (!ois_np) {
 		pdata->ois_product_name = OIS_NAME_NOTHING;
 	} else {
-		parse_ois_data(pdata, ois_np);
+		ret = parse_ois_data(pdata, ois_np);
+		of_node_put(ois_np);
+		if (ret)
+			goto p_err;
 	}
 
 	ret = module_callback(dev, pdata);
@@ -762,6 +803,7 @@ int fimc_is_module_parse_dt(struct device *dev,
 	pdata->pinctrl = devm_pinctrl_get(dev);
 	if (IS_ERR(pdata->pinctrl)) {
 		probe_err("devm_pinctrl_get is fail");
+		ret = PTR_ERR(pdata->pinctrl);
 		goto p_err;
 	}
 
@@ -771,9 +813,13 @@ int fimc_is_module_parse_dt(struct device *dev,
 		goto p_err;
 	}
 
-	internal_vc_np = of_find_node_by_name(dnode, "internal_vc");
-	if (internal_vc_np)
-		parse_internal_vc_data(pdata, internal_vc_np);
+	internal_vc_np = of_get_child_by_name(dnode, "internal_vc");
+	if (internal_vc_np) {
+		ret = parse_internal_vc_data(pdata, internal_vc_np);
+		of_node_put(internal_vc_np);
+		if (ret)
+			goto p_err;
+	}
 
 	dev->platform_data = pdata;
 
