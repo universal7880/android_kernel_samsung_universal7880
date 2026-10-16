@@ -158,6 +158,9 @@ static irqreturn_t s2mu004_irq_thread(int irq, void *data)
 	int i, ret;
 
 	u8 temp_vdadc;
+#ifdef CONFIG_SOC_EXYNOS7880
+	u8 chg_status;
+#endif
 	pr_debug("%s: irq gpio pre-state(0x%02x)\n", __func__,
 				gpio_get_value(s2mu004->irq_gpio));
 
@@ -186,6 +189,14 @@ static irqreturn_t s2mu004_irq_thread(int irq, void *data)
 	/* MUIC INT1 ~ INT2 */
 	ret = s2mu004_bulk_read(s2mu004->i2c, S2MU004_REG_MUIC_INT1,
 				S2MU004_NUM_IRQ_MUIC_REGS, &irq_reg[MUIC_INT1]);
+#ifdef CONFIG_SOC_EXYNOS7880
+	/* Recover a missed MUIC VBUS-off interrupt from charger UVLO. */
+	ret = s2mu004_read_reg(s2mu004->i2c, S2MU004_REG_SC_STATUS0,
+				&chg_status);
+	if (!ret && !(chg_status & 0xE0) && (irq_reg[CHG_INT1] & 0x80))
+		irq_reg[MUIC_INT2] |= 0x80;
+#endif
+
 	pr_info("%s: muic interrupt(0x%02x, 0x%02x)\n", __func__,
 			irq_reg[MUIC_INT1], irq_reg[MUIC_INT2]);
 
