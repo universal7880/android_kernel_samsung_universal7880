@@ -97,7 +97,11 @@ snd-soc-spdif-rx-objs := spdif_receiver.o
 ifeq ($(CONFIG_SND_SOC_EXYNOS_AUDMIXER_VER),2)
 snd-soc-audmixer-v2-objs := exynos-audmixer-v2.o
 else
+ifeq ($(CONFIG_SOC_EXYNOS7880)$(CONFIG_SND_SOC_SAMSUNG_UNIVERSAL7880_COD3026X),yy)
+snd-soc-audmixer-objs := exynos7880/exynos-audmixer.o
+else
 snd-soc-audmixer-objs := exynos-audmixer.o
+endif
 endif
 snd-soc-ssm2518-objs := ssm2518.o
 snd-soc-ssm2602-objs := ssm2602.o

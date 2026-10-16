@@ -1,3 +1,8 @@
+#if defined(CONFIG_SOC_EXYNOS7880) && \
+	defined(CONFIG_SND_SOC_SAMSUNG_UNIVERSAL7880_COD3026X) && \
+	CONFIG_SND_SOC_EXYNOS_AUDMIXER_VER != 2
+#include <sound/exynos7880-audmixer.h>
+#else
 #ifndef __SOUND_EXYNOS_AUDMIXER_H__
 #define __SOUND_EXYNOS_AUDMIXER_H__
 
@@ -97,3 +102,5 @@ bool is_cp_aud_enabled(void)
 #endif
 
 #endif /* __SOUND_EXYNOS_AUDMIXER_H__ */
+
+#endif
