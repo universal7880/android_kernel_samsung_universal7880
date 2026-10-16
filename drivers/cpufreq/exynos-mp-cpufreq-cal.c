@@ -176,6 +176,8 @@ static int exynos_mp_cpufreq_init_cal_table(cluster_type cluster)
 	/* allocate to temporary memory for getting table from cal */
 	ptr_temp_table = kzalloc(sizeof(struct dvfs_rate_volt)
 				* ptr->max_idx_num, GFP_KERNEL);
+	if (!ptr_temp_table)
+		return -ENOMEM;
 
 	/* check freq_table with cal */
 	table_size = cal_dfs_get_rate_asv_table(cl_id, ptr_temp_table);
