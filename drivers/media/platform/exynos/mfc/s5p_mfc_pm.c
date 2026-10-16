@@ -97,6 +97,14 @@ int s5p_mfc_clock_on(struct s5p_mfc_dev *dev)
 		}
 		mfc_debug(3, "End: enable protection\n");
 		spin_unlock_irqrestore(&dev->pm.clklock, flags);
+#ifdef CONFIG_SOC_EXYNOS7880
+	} else {
+		ret = s5p_mfc_mem_resume(dev->alloc_ctx);
+		if (ret < 0) {
+			clk_disable(dev->pm.clock);
+			return ret;
+		}
+#endif
 	}
 
 	dev->pm.clock_on_steps |= 0x1 << 4;
@@ -194,6 +202,10 @@ void s5p_mfc_clock_off(struct s5p_mfc_dev *dev)
 			mfc_debug(3, "End: disable protection\n");
 			dev->pm.clock_off_steps |= 0x1 << 6;
 			spin_unlock_irqrestore(&dev->pm.clklock, flags);
+#ifdef CONFIG_SOC_EXYNOS7880
+		} else {
+			s5p_mfc_mem_suspend(dev->alloc_ctx);
+#endif
 		}
 		dev->pm.clock_off_steps |= 0x1 << 7;
 		clk_disable(dev->pm.clock);

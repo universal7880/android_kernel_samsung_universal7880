@@ -2744,7 +2744,11 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	dev->alloc_ctx_drm_fw = (struct vb2_alloc_ctx *)
 		vb2_ion_create_context(&pdev->dev,
 			IS_MFCV6(dev) ? SZ_4K : SZ_128K,
+#ifdef CONFIG_SOC_EXYNOS7880
+			VB2ION_CTX_DRM_MFCFW);
+#else
 			VB2ION_CTX_DRM_MFCFW | VB2ION_CTX_IOMMU);
+#endif
 	if (IS_ERR(dev->alloc_ctx_drm_fw)) {
 		mfc_err_dev("failed to prepare F/W allocation context\n");
 		ret = PTR_ERR(dev->alloc_ctx_drm_fw);
@@ -2753,7 +2757,11 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	dev->alloc_ctx_drm = (struct vb2_alloc_ctx *)
 		vb2_ion_create_context(&pdev->dev,
 			SZ_4K,
+#ifdef CONFIG_SOC_EXYNOS7880
+			VB2ION_CTX_UNCACHED | VB2ION_CTX_DRM_VIDEO);
+#else
 			VB2ION_CTX_UNCACHED | VB2ION_CTX_DRM_VIDEO | VB2ION_CTX_IOMMU);
+#endif
 	if (IS_ERR(dev->alloc_ctx_drm)) {
 		mfc_err_dev("failed to prepare DRM allocation context\n");
 		ret = PTR_ERR(dev->alloc_ctx_drm);
@@ -2787,7 +2795,9 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	g_mfc_dev[dev->id] = dev;
 
+#ifndef CONFIG_SOC_EXYNOS7880
 	vb2_ion_attach_iommu(dev->alloc_ctx);
+#endif
 
 	pr_debug("%s--\n", __func__);
 	return 0;
@@ -2912,9 +2922,11 @@ static int s5p_mfc_resume(struct device *dev)
 	if (m_dev->num_inst == 0)
 		return 0;
 
+#ifndef CONFIG_SOC_EXYNOS7880
 	ret = exynos_smc(MC_FC_SET_CFW_PROT, 0, 0, 0);
 	if (ret != SMC_CFW_OK)
 		mfc_err("failed to enable MFC CFW early. ret: 0x%x\n", ret);
+#endif
 
 	ret = s5p_mfc_wakeup(m_dev);
 
@@ -2948,11 +2960,13 @@ static int s5p_mfc_runtime_resume(struct device *dev)
 {
 	struct s5p_mfc_dev *m_dev = platform_get_drvdata(to_platform_device(dev));
 	int pre_power;
-	uint32_t ret;
 
+#ifndef CONFIG_SOC_EXYNOS7880
+	uint32_t ret;
 	ret = exynos_smc(MC_FC_SET_CFW_PROT, 0, 0, 0);
 	if (ret != SMC_CFW_OK)
 		mfc_err("failed to enable MFC CFW early. ret: 0x%x\n", ret);
+#endif
 
 	if (!m_dev) {
 		mfc_err("no mfc device to run\n");
