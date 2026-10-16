@@ -1411,6 +1411,7 @@ static int samsung_i2s_dai_probe(struct snd_soc_dai *dai)
 {
 	struct i2s_dai *i2s = to_info(dai);
 	struct i2s_dai *other = i2s->pri_dai ? : i2s->sec_dai;
+	int ret;
 #ifdef CONFIG_SND_SAMSUNG_COMPR
 	struct i2s_dai *compr = i2s->compr_dai;
 
@@ -1479,6 +1480,16 @@ static int samsung_i2s_dai_probe(struct snd_soc_dai *dai)
 #endif
 
 
+	if (i2s->amixer) {
+		ret = eax_dai_register(dai, &samsung_i2s_dai_ops,
+				      i2s_suspend_force, i2s_resume_force);
+		if (ret) {
+			dev_err(&i2s->pdev->dev,
+				"failed to initialize EAX mixer: %d\n", ret);
+			goto err_eax;
+		}
+	}
+
 	if (other) {
 		other->addr = i2s->addr;
 		other->clk = i2s->clk;
@@ -1499,9 +1510,6 @@ static int samsung_i2s_dai_probe(struct snd_soc_dai *dai)
 		idma_reg_addr_init(i2s->addr,
 					i2s->sec_dai->idma_playback.dma_addr);
 #endif
-	if (i2s->amixer)
-		eax_dai_register(dai, &samsung_i2s_dai_ops,
-					i2s_suspend_force, i2s_resume_force);
 
 probe_exit:
 	clk_prepare_enable(i2s->opclk0);
@@ -1532,6 +1540,19 @@ probe_exit:
 	clk_disable_unprepare(i2s->opclk0);
 	clk_disable_unprepare(i2s->opclk1);
 	return 0;
+
+err_eax:
+	if (!IS_ERR(i2s->opclk0))
+		clk_put(i2s->opclk0);
+	if (!IS_ERR(i2s->opclk1))
+		clk_put(i2s->opclk1);
+	clk_put(i2s->clk);
+	iounmap(i2s->addr);
+	i2s->clk = NULL;
+	i2s->opclk0 = NULL;
+	i2s->opclk1 = NULL;
+	i2s->addr = NULL;
+	return ret;
 }
 
 static int samsung_i2s_dai_remove(struct snd_soc_dai *dai)

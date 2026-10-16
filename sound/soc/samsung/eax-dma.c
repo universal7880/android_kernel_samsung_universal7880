@@ -140,6 +140,7 @@ static struct dma_info {
 	int			buf_rd_idx;
 	u32			*dma_buf;
 	unsigned int		dma_period;
+	dma_addr_t		dma_handle;
 	dma_addr_t		dma_start;
 	dma_addr_t		dma_pos;
 	dma_addr_t		dma_end;
@@ -247,42 +248,63 @@ static inline bool eax_mixer_any_buf_running(void)
 	return false;
 }
 
-static void eax_adma_alloc_buf(void)
+static int eax_adma_alloc_buf(void)
 {
-#ifdef CONFIG_SND_SAMSUNG_IOMMU
 	size_t size = 128 * 1024;
+#ifdef CONFIG_SND_SAMSUNG_IOMMU
 	struct iommu_domain *domain = lpass_get_iommu_domain();
+	int ret;
+
+	if (!domain)
+		return -ENODEV;
+#endif
 
 	di.dma_buf = dma_alloc_coherent(di.cpu_dai->dev,
-				size, &di.dma_start, GFP_KERNEL);
-	iommu_map(domain, 0x48000000, di.dma_start, size, 0);
+				size, &di.dma_handle, GFP_KERNEL);
+	if (!di.dma_buf)
+		return -ENOMEM;
+
+#ifdef CONFIG_SND_SAMSUNG_IOMMU
+	ret = iommu_map(domain, 0x48000000, di.dma_handle, size, 0);
+	if (ret) {
+		dma_free_coherent(di.cpu_dai->dev, size, di.dma_buf,
+				  di.dma_handle);
+		di.dma_buf = NULL;
+		return ret;
+	}
 	di.dma_start = 0x48000000;
 #else
-	size_t size = 128 * 1024;
-	di.dma_buf = dma_alloc_coherent(di.cpu_dai->dev,
-				size, &di.dma_start, GFP_KERNEL);
+	di.dma_start = di.dma_handle;
 #endif
-	memset(di.buf_wr_p, 0, sizeof(unsigned char *) * DMA_PERIOD_CNT);
+	memset(di.buf_wr_p, 0, sizeof(di.buf_wr_p));
+
+	return 0;
 }
 
 static void eax_adma_free_buf(void)
 {
+	size_t size = 128 * 1024;
 #ifdef CONFIG_SND_SAMSUNG_IOMMU
-	size_t size = 128 * 1024;
 	struct iommu_domain *domain = lpass_get_iommu_domain();
-
-	dma_free_coherent(di.cpu_dai->dev, size, (void *)di.dma_buf, di.dma_start);
-	iommu_unmap(domain, 0x48000000, size);
-	di.dma_start = 0;
-#else
-	size_t size = 128 * 1024;
-	dma_free_coherent(di.cpu_dai->dev, size, (void *)di.dma_buf, di.dma_start);
 #endif
-	memset(di.buf_wr_p, 0, sizeof(unsigned char *) * DMA_PERIOD_CNT);
+
+	if (!di.dma_buf)
+		return;
+
+#ifdef CONFIG_SND_SAMSUNG_IOMMU
+	iommu_unmap(domain, di.dma_start, size);
+#endif
+	dma_free_coherent(di.cpu_dai->dev, size, di.dma_buf, di.dma_handle);
+	di.dma_buf = NULL;
+	di.dma_start = 0;
+	di.dma_handle = 0;
+	memset(di.buf_wr_p, 0, sizeof(di.buf_wr_p));
 }
 
 int eax_dma_dai_register(struct snd_soc_dai *dai)
 {
+	int ret;
+
 	spin_lock_init(&di.lock);
 	mutex_init(&di.mutex);
 
@@ -295,12 +317,26 @@ int eax_dma_dai_register(struct snd_soc_dai *dai)
 	spin_lock_init(&mi.lock);
 	mi.cpu_dai = dai;
 	mi.running = false;
-	mi.thread_id = (struct task_struct *)
-			kthread_run(eax_mixer_kthread, NULL, "eax-mixer");
 
-	eax_adma_alloc_buf();
+	ret = eax_adma_alloc_buf();
+	if (ret)
+		goto err_alloc;
+
+	mi.thread_id = kthread_run(eax_mixer_kthread, NULL, "eax-mixer");
+	if (IS_ERR(mi.thread_id)) {
+		ret = PTR_ERR(mi.thread_id);
+		mi.thread_id = NULL;
+		eax_adma_free_buf();
+		goto err_alloc;
+	}
 
 	return 0;
+
+err_alloc:
+	mutex_destroy(&di.mutex);
+	di.cpu_dai = NULL;
+	mi.cpu_dai = NULL;
+	return ret;
 }
 
 int eax_dma_dai_unregister(void)

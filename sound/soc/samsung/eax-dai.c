@@ -148,15 +148,19 @@ int eax_dai_register(struct snd_soc_dai *dai,
 		int (*dai_suspend)(struct snd_soc_dai *dai),
 		int (*dai_resume)(struct snd_soc_dai *dai))
 {
+	int ret;
+
 	pr_debug("%s: dai %p, dai_ops %p\n", __func__, dai, dai_ops);
+
+	ret = eax_dma_dai_register(dai);
+	if (ret)
+		return ret;
 
 	ei.master = true;
 	ei.master_dai = dai;
 	ei.master_dai_ops = dai_ops;
 	ei.master_dai_suspend = dai_suspend;
 	ei.master_dai_resume = dai_resume;
-
-	eax_dma_dai_register(dai);
 
 	return 0;
 }
