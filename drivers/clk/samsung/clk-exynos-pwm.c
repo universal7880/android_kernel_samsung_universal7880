@@ -113,6 +113,10 @@ void __init exynos_pwm_clk_init(struct device_node *np)
 {
 	static void __iomem *reg_base;
 	unsigned int reg_tcfg0;
+#ifdef CONFIG_SOC_EXYNOS7880
+	struct clk *pwm_clk, *pwm_sclk;
+	int ret;
+#endif
 
 	reg_base = of_iomap(np, 0);
 
@@ -127,6 +131,35 @@ void __init exynos_pwm_clk_init(struct device_node *np)
 		pr_err("%s: could not allocate clk lookup table\n", __func__);
 		return;
 	}
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	/* CAL disables these gates before the PWM clock provider is initialized. */
+	pwm_clk = of_clk_get_by_name(np, "gate_timers");
+	if (IS_ERR(pwm_clk)) {
+		pr_err("%s: failed to get PWM bus clock: %ld\n",
+			__func__, PTR_ERR(pwm_clk));
+		goto err_free_table;
+	}
+
+	ret = clk_prepare_enable(pwm_clk);
+	if (ret) {
+		pr_err("%s: failed to enable PWM bus clock: %d\n", __func__, ret);
+		goto err_put_pwm_clk;
+	}
+
+	pwm_sclk = of_clk_get_by_name(np, "sclk_pwm");
+	if (IS_ERR(pwm_sclk)) {
+		pr_err("%s: failed to get PWM source clock: %ld\n",
+			__func__, PTR_ERR(pwm_sclk));
+		goto err_disable_pwm_clk;
+	}
+
+	ret = clk_prepare_enable(pwm_sclk);
+	if (ret) {
+		pr_err("%s: failed to enable PWM source clock: %d\n", __func__, ret);
+		goto err_put_pwm_sclk;
+	}
+#endif
 
 	clk_data.clks = clk_table;
 	clk_data.clk_num = exynos_pwm_max_clks;
@@ -184,7 +217,28 @@ void __init exynos_pwm_clk_init(struct device_node *np)
 				pwm_tin4_p, ARRAY_SIZE(pwm_tin4_p), 0,
 				reg_base + REG_TCFG1, 19, 0, 0, &lock);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	clk_disable_unprepare(pwm_sclk);
+	clk_put(pwm_sclk);
+	clk_disable_unprepare(pwm_clk);
+	clk_put(pwm_clk);
+#endif
+
 	pr_info("Exynos: pwm: clock setup completed\n");
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	return;
+
+err_put_pwm_sclk:
+	clk_put(pwm_sclk);
+err_disable_pwm_clk:
+	clk_disable_unprepare(pwm_clk);
+err_put_pwm_clk:
+	clk_put(pwm_clk);
+err_free_table:
+	kfree(clk_table);
+	iounmap(reg_base);
+#endif
 }
 CLK_OF_DECLARE(exynos_pwm_clk, "samsung,exynos-pwm-clock",
 		exynos_pwm_clk_init);
