@@ -1527,7 +1527,7 @@ void exynos_ss_panic_handler_safe(struct pt_regs *regs)
 
 }
 
-static size_t __init exynos_ss_remap(void)
+static int __init exynos_ss_remap(void)
 {
 	unsigned long i;
 	unsigned int enabled_count = 0;
@@ -1538,18 +1538,21 @@ static size_t __init exynos_ss_remap(void)
 	struct page **pages;
 
 	page_size = ess_desc.vm.size / PAGE_SIZE;
-	pages = kzalloc(sizeof(struct page*) * page_size, GFP_KERNEL);
+	pages = kcalloc(page_size, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
 	page = phys_to_page(ess_desc.vm.phys_addr);
 
 	for (i = 0; i < page_size; i++)
 		pages[i] = page++;
 
 	ret = map_vm_area(&ess_desc.vm, prot, pages);
+	kfree(pages);
 	if (ret) {
 		pr_err("exynos-snapshot: failed to mapping between virt and phys for firmware");
-		return -ENOMEM;
+		return ret;
 	}
-	kfree(pages);
 
 	/* initializing value */
 	pre_paddr = (size_t)ess_base.paddr;
@@ -1578,7 +1581,7 @@ static size_t __init exynos_ss_remap(void)
 			enabled_count++;
 		}
 	}
-	return (size_t)(enabled_count ? exynos_ss_get_base_vaddr() : 0);
+	return enabled_count ? 0 : -ENODEV;
 }
 
 static int __init exynos_ss_init_desc(void)
@@ -1911,6 +1914,8 @@ static int __init exynos_ss_init_dt(void)
 
 static int __init exynos_ss_init(void)
 {
+	int ret;
+
 	if (ess_base.vaddr && ess_base.paddr && ess_base.size) {
 	/*
 	 *  for debugging when we don't know the virtual address of pointer,
@@ -1919,7 +1924,11 @@ static int __init exynos_ss_init(void)
 	 *  --> @virtual_addr | @phy_addr | @buffer_size | @magic_key(0xDBDBDBDB)
 	 *  And then, the debug buffer is shown.
 	 */
-		exynos_ss_remap();
+		ret = exynos_ss_remap();
+		if (ret) {
+			pr_err("exynos-snapshot: failed to map log buffer: %d\n", ret);
+			return ret;
+		}
 		exynos_ss_fixmap();
 		exynos_ss_init_dt();
 		exynos_ss_scratch_reg(ESS_SIGN_SCRATCH);
