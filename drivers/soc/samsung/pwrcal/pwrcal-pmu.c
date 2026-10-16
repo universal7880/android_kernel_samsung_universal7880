@@ -35,6 +35,10 @@ static int blkpwr_enable(struct cal_pd *pd)
 		}
 	}
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (ret)
+		goto out;
+#endif
 	if (pd->post)
 		pd->post(1);
 
@@ -42,7 +46,11 @@ out:
 	if (pd && ret)
 		pr_err("BLKPWR enable Fail (%s) STATUS : 0x%08X\n", pd->name, pwrcal_readl(pd->status));
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	return ret;
+#else
 	return 0;
+#endif
 }
 
 static int blkpwr_disable(struct cal_pd *pd)
@@ -76,6 +84,10 @@ static int blkpwr_disable(struct cal_pd *pd)
 		}
 	}
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (ret)
+		goto out;
+#endif
 	if (pd->post)
 		pd->post(0);
 
@@ -83,7 +95,11 @@ out:
 	if (pd && ret)
 		pr_err("BLKPWR disable Fail (%s) STATUS : 0x%08X\n", pd->name, pwrcal_readl(pd->status));
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	return ret;
+#else
 	return 0;
+#endif
 }
 
 
