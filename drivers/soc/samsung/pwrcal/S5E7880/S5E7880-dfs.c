@@ -837,7 +837,7 @@ void dfs_set_clk_information(struct pwrcal_vclk_dfs *dfs)
 	dvfs_table->members[0] = REPRESENT_RATE;
 	for (i = 0; i < dvfs_domain->num_of_clock; ++i) {
 		dvfs_table->members[i + 1] = clk_find(dvfs_domain->list_clock[i]);
-		if (dvfs_table->members[i] == NULL)
+		if (dvfs_table->members[i + 1] == NULL)
 			return;
 	}
 
@@ -848,7 +848,7 @@ void dfs_set_clk_information(struct pwrcal_vclk_dfs *dfs)
 	for (i = 0; i < dvfs_domain->num_of_level; ++i) {
 
 		dvfs_table->rate_table[i * (dvfs_domain->num_of_clock + 1)] = dvfs_domain->list_level[i].level;
-		for (j = 0; j <= dvfs_domain->num_of_clock; ++j) {
+		for (j = 0; j < dvfs_domain->num_of_clock; ++j) {
 			dvfs_table->rate_table[i * (dvfs_domain->num_of_clock + 1) + j + 1] =
 				dvfs_domain->list_dvfs_value[i * dvfs_domain->num_of_clock + j];
 		}
