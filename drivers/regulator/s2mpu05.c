@@ -212,6 +212,9 @@ static int s2m_set_ramp_delay(struct regulator_dev *rdev, int ramp_delay)
 	switch (reg_id) {
 	case S2MPU05_BUCK1:
 	case S2MPU05_BUCK2:
+#ifdef CONFIG_SOC_EXYNOS7880
+	case S2MPU05_BUCK2_OUT2:
+#endif
 		ramp_shift = 6;
 		break;
 	case S2MPU05_BUCK3:
@@ -528,6 +531,10 @@ static struct regulator_desc regulators[S2MPU05_REGULATOR_MAX] = {
 			_REG(_L9CTRL1), _REG(_L9CTRL1), _TIME(_LDO)),
 	LDO_DESC("LDO10", _LDO(10), &_ldo_ops(), _LDO(_MIN3), _LDO(_STEP2),
 			_REG(_L10CTRL), _REG(_L10CTRL), _TIME(_LDO)),
+#ifdef CONFIG_SOC_EXYNOS7880
+	LDO_DESC("LDO24", _LDO(24), &_ldo_ops(), _LDO(_MIN3), _LDO(_STEP2),
+			_REG(_L24CTRL), _REG(_L24CTRL), _TIME(_LDO)),
+#endif
 	LDO_DESC("LDO25", _LDO(25), &_ldo_ops(), _LDO(_MIN1), _LDO(_STEP2),
 			_REG(_L25CTRL), _REG(_L25CTRL), _TIME(_LDO)),
 	LDO_DESC("LDO26", _LDO(26), &_ldo_ops(), _LDO(_MIN2), _LDO(_STEP2),
@@ -553,6 +560,10 @@ static struct regulator_desc regulators[S2MPU05_REGULATOR_MAX] = {
 	BUCK_DESC("BUCK1", _BUCK(1), &_buck_ops(), _BUCK(_MIN1), _BUCK(_STEP1),
 			_REG(_B1CTRL2), _REG(_B1CTRL1), _TIME(_BUCK1)),
 	BUCK_DESC("BUCK2", _BUCK(2), &_buck_ops(), _BUCK(_MIN1), _BUCK(_STEP1),
+#ifdef CONFIG_SOC_EXYNOS7880
+			_REG(_B2CTRL3), _REG(_B2CTRL1), _TIME(_BUCK2)),
+	BUCK_DESC("BUCK2_OUT2", _BUCK(2_OUT2), &_buck_ops(), _BUCK(_MIN1), _BUCK(_STEP1),
+#endif
 			_REG(_B2CTRL2), _REG(_B2CTRL1), _TIME(_BUCK2)),
 	BUCK_DESC("BUCK3", _BUCK(3), &_buck_ops(), _BUCK(_MIN1), _BUCK(_STEP1),
 			_REG(_B3CTRL2), _REG(_B3CTRL1), _TIME(_BUCK3)),
@@ -797,8 +808,18 @@ static int s2mpu05_pmic_probe(struct platform_device *pdev)
 	}
 
 	/* On sequence Config for MIF_G3D, CP_PWR_UP */
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (SEC_PMIC_REV(iodev) & 0x80) {
+		sec_reg_write(iodev, 0x62, 0x3E);	/* seq. LDO9, LDO8 */
+		sec_reg_write(iodev, 0x63, 0x34);	/* seq. LDO11, LDO10 */
+	} else {
+		sec_reg_write(iodev, 0x62, 0x4E);	/* seq. LDO9, LDO8 */
+		sec_reg_write(iodev, 0x63, 0x33);	/* seq. LDO11, LDO10 */
+	}
+#else
 	sec_reg_write(iodev, 0x62, 0x4E);	/* seq. LDO9, LDO8 */
 	sec_reg_write(iodev, 0x63, 0x33);	/* seq. LDO11, LDO10 */
+#endif
 	sec_reg_write(iodev, 0x64, 0x54);	/* seq. LDO13, LDO12 */
 	sec_reg_write(iodev, 0x65, 0x76);	/* seq. LDO15, LDO14 */
 	sec_reg_write(iodev, 0x71, 0x80);	/* seq. L11~L4 */
