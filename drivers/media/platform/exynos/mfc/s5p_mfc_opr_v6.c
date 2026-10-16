@@ -187,11 +187,13 @@ static int s5p_mfc_decode_one_frame(struct s5p_mfc_ctx *ctx, int last_frame)
 				dec->dpb_status, ctx->dst_queue_cnt,
 						dec->dpb_queue_cnt);
 
-	reg = MFC_READL(S5P_FIMV_D_NAL_START_OPTIONS);
-	reg &= ~(0x1 << S5P_FIMV_D_NAL_START_OPT_BLACK_BAR_SHIFT);
-	reg |= ((dec->detect_black_bar & 0x1) << S5P_FIMV_D_NAL_START_OPT_BLACK_BAR_SHIFT);
-	MFC_WRITEL(reg, S5P_FIMV_D_NAL_START_OPTIONS);
-	mfc_debug(3, "black bar detect set: %#x\n", reg);
+	if (FW_HAS_BLACK_BAR_DETECT(dev)) {
+		reg = MFC_READL(S5P_FIMV_D_NAL_START_OPTIONS);
+		reg &= ~(0x1 << S5P_FIMV_D_NAL_START_OPT_BLACK_BAR_SHIFT);
+		reg |= ((dec->detect_black_bar & 0x1) << S5P_FIMV_D_NAL_START_OPT_BLACK_BAR_SHIFT);
+		MFC_WRITEL(reg, S5P_FIMV_D_NAL_START_OPTIONS);
+		mfc_debug(3, "black bar detect set: %#x\n", reg);
+	}
 
 	if (dec->is_dynamic_dpb) {
 		mfc_debug(2, "Dynamic:0x%08x, Available:0x%08lx\n",
