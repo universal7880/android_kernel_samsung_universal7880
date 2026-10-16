@@ -305,6 +305,9 @@ int eax_dma_dai_register(struct snd_soc_dai *dai)
 
 int eax_dma_dai_unregister(void)
 {
+	if (!IS_ERR_OR_NULL(mi.thread_id))
+		kthread_stop(mi.thread_id);
+
 	mutex_destroy(&di.mutex);
 
 	eax_adma_free_buf();
@@ -1099,7 +1102,10 @@ static int eax_mixer_kthread(void *arg)
 	sched_setscheduler_nocheck(current, SCHED_FIFO, &param_fifo);
 
 	while (!kthread_should_stop()) {
-		wait_event_interruptible(mixer_run_wq, mi.running);
+		wait_event_interruptible(mixer_run_wq,
+				mi.running || kthread_should_stop());
+		if (kthread_should_stop())
+			break;
 		eax_mixer_prepare();
 		eax_mixer_write();
 	}
