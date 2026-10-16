@@ -19,6 +19,9 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #endif
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+#include <linux/vbus_notifier.h>
+#endif
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/gpio.h>
@@ -67,6 +70,9 @@
 #define ABOV_RAWDATA		0x0E
 #define ABOV_VENDORID		0x12
 #define ABOV_GLOVE			0x13
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+#define ABOV_TSPTA			0x13
+#endif
 #define ABOV_KEYBOARD		0x13
 #define ABOV_MODEL_NUMBER	0x14		//Model No.
 #define ABOV_FLIP			0x15
@@ -187,6 +193,12 @@ struct abov_tk_info {
 	u8 checksum_l;
 	u8 checksum_l_bin;
 	bool enabled;
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+	bool ta_notifier;
+	bool ta_connected;
+	bool vbus_registered;
+	struct notifier_block vbus_nb;
+#endif
 	bool glovemode;
 	bool keyboard_mode;
 	bool flip_mode;
@@ -222,6 +234,9 @@ static void abov_tk_input_close(struct input_dev *dev);
 
 static int abov_tk_i2c_read_checksum(struct abov_tk_info *info);
 static void abov_tk_reset(struct abov_tk_info *info);
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+static void abov_set_ta_status(struct abov_tk_info *info);
+#endif
 
 static int abov_touchkey_led_status;
 static int abov_touchled_cmd_reserved;
@@ -938,6 +953,11 @@ static void abov_tk_reset(struct abov_tk_info *info)
 		abov_mode_enable(client, ABOV_KEYBOARD, CMD_MOBILE_KBD_ON);
 #endif
 	info->enabled = true;
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+	if (info->ta_connected)
+		abov_set_ta_status(info);
+#endif
 
 	enable_irq(info->irq);
 	input_info(true,&client->dev, "%s end\n", __func__);
@@ -3177,6 +3197,49 @@ static int fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data);
 #endif
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+static void abov_set_ta_status(struct abov_tk_info *info)
+{
+	u8 cmd_ta = info->ta_connected ? 0x10 : 0x20;
+	u8 cmd_reset = 0x10;
+	int ret;
+
+	if (!info->ta_notifier || !info->enabled)
+		return;
+
+	ret = abov_tk_i2c_write(info->client, ABOV_TSPTA, &cmd_ta, 1);
+	if (ret < 0) {
+		dev_err(&info->client->dev, "Failed to set charger mode: %d\n", ret);
+		return;
+	}
+
+	ret = abov_tk_i2c_write(info->client, ABOV_SW_RESET, &cmd_reset, 1);
+	if (ret < 0)
+		dev_err(&info->client->dev, "Failed to reset charger mode: %d\n", ret);
+}
+
+static int abov_touchkey_vbus_notification(struct notifier_block *nb,
+		unsigned long cmd, void *data)
+{
+	struct abov_tk_info *info = container_of(nb, struct abov_tk_info, vbus_nb);
+	vbus_status_t status = *(vbus_status_t *)data;
+
+	switch (status) {
+	case STATUS_VBUS_HIGH:
+		info->ta_connected = true;
+		break;
+	case STATUS_VBUS_LOW:
+		info->ta_connected = false;
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	abov_set_ta_status(info);
+	return NOTIFY_DONE;
+}
+#endif
+
 static int abov_tk_probe(struct i2c_client *client,
 				  const struct i2c_device_id *id)
 {
@@ -3217,6 +3280,9 @@ static int abov_tk_probe(struct i2c_client *client,
 
 	info->client = client;
 	info->input_dev = input_dev;
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+	info->ta_notifier = of_property_read_bool(client->dev.of_node, "abov,ta-notifier");
+#endif
 
 #ifdef CONFIG_TOUCHKEY_GRIP
 	wake_lock_init(&info->touckey_wake_lock, WAKE_LOCK_SUSPEND, "touchkey wake lock");
@@ -3453,6 +3519,17 @@ static int abov_tk_probe(struct i2c_client *client,
 		info->fb_notif_registered = true;
 #endif
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+	if (info->ta_notifier) {
+		ret = vbus_notifier_register(&info->vbus_nb,
+				abov_touchkey_vbus_notification, VBUS_NOTIFY_DEV_CHARGER);
+		if (ret)
+			dev_err(&client->dev, "Failed to register charger notifier: %d\n", ret);
+		else
+			info->vbus_registered = true;
+	}
+#endif
+
 	return 0;
 
 err_req_irq:
@@ -3506,6 +3583,11 @@ static void led_twinkle_work(struct work_struct *work)
 static int abov_tk_remove(struct i2c_client *client)
 {
 	struct abov_tk_info *info = i2c_get_clientdata(client);
+
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+	if (info->vbus_registered)
+		vbus_notifier_unregister(&info->vbus_nb);
+#endif
 
 #if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
 	if (info->fb_notif_registered)
@@ -3624,6 +3706,11 @@ static int abov_tk_resume(struct device *dev)
 
 		input_dbg(true, &info->client->dev, "%s: LED reserved on\n", __func__);
 	}
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_VBUS_NOTIFIER)
+	if (info->ta_connected)
+		abov_set_ta_status(info);
+#endif
+
 	enable_irq(info->irq);
 
 	return 0;
