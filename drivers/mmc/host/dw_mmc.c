@@ -3624,6 +3624,10 @@ static struct dw_mci_of_quirks {
 		.quirk	= "broken-cd",
 		.id	= DW_MCI_QUIRK_BROKEN_CARD_DETECTION,
 	}, {
+		/* Older Samsung device trees use this spelling. */
+		.quirk	= "broken-card-detect",
+		.id	= DW_MCI_QUIRK_BROKEN_CARD_DETECTION,
+	}, {
 		.quirk	= "disable-wp",
 		.id	= DW_MCI_QUIRK_NO_WRITE_PROTECT,
 	}, {
