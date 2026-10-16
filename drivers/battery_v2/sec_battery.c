@@ -419,6 +419,22 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 			*charging_current = 900;
 		}
 	} else if (battery->siop_level < 100) {
+#ifdef CONFIG_SOC_EXYNOS7880
+		/* decrease the charging current according to siop level */
+		*charging_current = *charging_current * battery->siop_level / 100;
+
+		/* do forced set charging current */
+		if (*charging_current > 0 && *charging_current < usb_charging_current)
+			*charging_current = usb_charging_current;
+
+		/* if siop level is 0, set minimum charging current from dt */
+		if (battery->siop_level == 0 &&
+			battery->pdata->minimum_charging_current_by_siop_0 > 0){
+			pr_info("%s: set minimum charging current(%d) when siop level is 0\n", __func__, battery->pdata->minimum_charging_current_by_siop_0);
+			*charging_current = battery->pdata->minimum_charging_current_by_siop_0;
+		}
+
+#else
 		int max_charging_current;
 
 		if (is_wireless_type(battery->cable_type)) {
@@ -430,7 +446,7 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 				*charging_current = usb_charging_current;
 
 			/* if siop level is 0, set minimum charging current from dt */
-			if (battery->siop_level == 0 && 
+			if (battery->siop_level == 0 &&
 				battery->pdata->minimum_charging_current_by_siop_0 > 0){
 				pr_info("%s: set minimum charging current(%d) when siop level is 0\n", __func__, battery->pdata->minimum_charging_current_by_siop_0);
 				*charging_current = battery->pdata->minimum_charging_current_by_siop_0;
@@ -442,6 +458,8 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 			if (*charging_current > max_charging_current)
 				*charging_current = max_charging_current;
 		}
+
+#endif
 
 		if (is_nv_wireless_type(battery->cable_type)) {
 			if (*input_current > battery->pdata->siop_wireless_input_limit_current)
@@ -457,18 +475,34 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 			if (is_hv_wire_12v_type(battery->cable_type)) {
 				if (*input_current > battery->pdata->siop_hv_12v_input_limit_current)
 					*input_current = battery->pdata->siop_hv_12v_input_limit_current;
+#ifdef CONFIG_SOC_EXYNOS7880
+				if (*charging_current > battery->pdata->siop_hv_12v_charging_limit_current)
+					*charging_current = battery->pdata->siop_hv_12v_charging_limit_current;
+#endif
 			} else {
 				if (*input_current > battery->pdata->siop_hv_input_limit_current)
 					*input_current = battery->pdata->siop_hv_input_limit_current;
+#ifdef CONFIG_SOC_EXYNOS7880
+				if (*charging_current > battery->pdata->siop_hv_charging_limit_current)
+					*charging_current = battery->pdata->siop_hv_charging_limit_current;
+#endif
 			}
 #if defined(CONFIG_CCIC_NOTIFIER)
 		} else if (battery->cable_type == POWER_SUPPLY_TYPE_PDIC) {
 			if (*input_current > (6000 / battery->input_voltage))
 				*input_current = 6000 / battery->input_voltage;
+#ifdef CONFIG_SOC_EXYNOS7880
+			if (*charging_current > battery->pdata->siop_charging_limit_current)
+				*charging_current = battery->pdata->siop_charging_limit_current;
+#endif
 #endif
 		} else {
 			if (*input_current > battery->pdata->siop_input_limit_current)
 				*input_current = battery->pdata->siop_input_limit_current;
+#ifdef CONFIG_SOC_EXYNOS7880
+			if (*charging_current > battery->pdata->siop_charging_limit_current)
+				*charging_current = battery->pdata->siop_charging_limit_current;
+#endif
 		}
 	}
 }
@@ -870,8 +904,14 @@ static int sec_bat_set_charging_current(struct sec_battery_info *battery)
 		}
 
 		/* check topoff current */
+#ifdef CONFIG_SOC_EXYNOS7880
+		if (battery->charging_mode == SEC_BATTERY_CHARGING_2ND &&
+			((battery->pdata->full_check_type_2nd == SEC_BATTERY_FULLCHARGED_CHGPSY) ||
+			(battery->pdata->full_check_type_2nd == SEC_BATTERY_FULLCHARGED_FG_CURRENT))) {
+#else
 		if (battery->charging_mode == SEC_BATTERY_CHARGING_2ND &&
 			battery->pdata->full_check_type_2nd == SEC_BATTERY_FULLCHARGED_CHGPSY) {
+#endif
 			topoff_current =
 				battery->pdata->charging_current[battery->cable_type].full_check_current_2nd;
 		}
