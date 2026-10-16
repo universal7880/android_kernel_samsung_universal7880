@@ -19,6 +19,9 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#ifdef CONFIG_SOC_EXYNOS7880
+#include <linux/cpumask.h>
+#endif
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
 #include <linux/amba/bus.h>
@@ -502,6 +505,10 @@ struct pl330_dmac {
 	enum pl330_dmac_state	state;
 	/* Holds list of reqs with due callbacks */
 	struct list_head        req_done;
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	bool multi_irq;
+#endif
 
 	/* Peripheral channels connected to this DMAC */
 	unsigned int num_peripherals;
@@ -2833,6 +2840,25 @@ static int pl330_notifier(struct notifier_block *nb,
 }
 #endif /* CONFIG_CPU_IDLE */
 
+#ifdef CONFIG_SOC_EXYNOS7880
+static void pl330_set_irq_affinity(struct amba_device *adev)
+{
+	struct pl330_dmac *pl330 = dev_get_drvdata(&adev->dev);
+	int i;
+
+	if (!pl330->multi_irq)
+		return;
+
+	for (i = 0; i < AMBA_NR_IRQS && adev->irq[i]; i++) {
+#ifdef CONFIG_SCHED_HMP
+		irq_set_affinity(adev->irq[i], &hmp_slow_cpu_mask);
+#else
+		irq_set_affinity(adev->irq[i], cpu_all_mask);
+#endif
+	}
+}
+#endif
+
 #ifdef CONFIG_PM
 static int pl330_resume(struct device *dev)
 {
@@ -2842,6 +2868,10 @@ static int pl330_resume(struct device *dev)
 
 	if (pl330->inst_wrapper)
 		__raw_writel((pl330->mcode_bus >> 32) & 0xf, pl330->inst_wrapper);
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	pl330_set_irq_affinity(to_amba_device(dev));
+#endif
 
 	return 0;
 }
@@ -2869,6 +2899,9 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 	struct resource *res;
 	int i, ret, irq;
 	int num_chan;
+#ifdef CONFIG_SOC_EXYNOS7880
+	u32 multi_irq = 0;
+#endif
 
 	pdat = dev_get_platdata(&adev->dev);
 
@@ -2893,11 +2926,22 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 
 	amba_set_drvdata(adev, pl330);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (adev->dev.of_node)
+		of_property_read_u32(adev->dev.of_node, "#dma-multi-irq", &multi_irq);
+	pl330->multi_irq = !!multi_irq;
+#endif
+
 	for (i = 0; i < AMBA_NR_IRQS; i++) {
 		irq = adev->irq[i];
 		if (irq) {
 			ret = devm_request_irq(&adev->dev, irq,
-					       pl330_irq_handler, 0,
+					       pl330_irq_handler,
+#ifdef CONFIG_SOC_EXYNOS7880
+					       pl330->multi_irq ? IRQF_GIC_MULTI_TARGET : 0,
+#else
+					       0,
+#endif
 					       dev_name(&adev->dev), pl330);
 			if (ret)
 				return ret;
@@ -2905,6 +2949,10 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 			break;
 		}
 	}
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	pl330_set_irq_affinity(adev);
+#endif
 
 	if (adev->dev.of_node){
 		*adev->dev.dma_mask = of_dma_get_mask(adev->dev.of_node,
