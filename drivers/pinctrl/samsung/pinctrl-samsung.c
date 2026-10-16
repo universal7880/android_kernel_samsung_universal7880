@@ -21,6 +21,9 @@
  */
 
 #include <linux/module.h>
+#ifdef CONFIG_SOC_EXYNOS7880
+#include <linux/clk.h>
+#endif
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/slab.h>
@@ -1184,6 +1187,37 @@ static struct samsung_pin_ctrl *samsung_pinctrl_get_soc_data(
 	return ctrl;
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+static void samsung_pinctrl_disable_clk(void *data)
+{
+	clk_disable_unprepare(data);
+}
+
+static int samsung_pinctrl_enable_clk(struct device *dev)
+{
+	struct clk *clk;
+	int ret;
+
+	/* Only the PERI GPIO controllers have a separate gate in the DT. */
+	if (of_property_match_string(dev->of_node, "clock-names", "gate_pinctrl") < 0)
+		return 0;
+
+	clk = devm_clk_get(dev, "gate_pinctrl");
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	ret = clk_prepare_enable(clk);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action(dev, samsung_pinctrl_disable_clk, clk);
+	if (ret)
+		clk_disable_unprepare(clk);
+
+	return ret;
+}
+#endif
+
 static int samsung_pinctrl_probe(struct platform_device *pdev)
 {
 	struct samsung_pinctrl_drv_data *drvdata;
@@ -1220,6 +1254,14 @@ static int samsung_pinctrl_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (res)
 		drvdata->irq = res->start;
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (of_device_is_compatible(dev->of_node, "samsung,exynos7880-pinctrl")) {
+		ret = samsung_pinctrl_enable_clk(dev);
+		if (ret)
+			return ret;
+	}
+#endif
 
 	ret = samsung_gpiolib_register(pdev, drvdata);
 	if (ret)
