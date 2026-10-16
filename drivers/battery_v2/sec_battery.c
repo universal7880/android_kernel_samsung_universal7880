@@ -8720,8 +8720,10 @@ static int sec_bat_parse_dt(struct device *dev,
 	len = len / sizeof(u32);
 
 	pdata->charging_current =
-		kzalloc(sizeof(sec_charging_current_t) * len,
-			GFP_KERNEL);
+		kcalloc(max_t(size_t, len, POWER_SUPPLY_TYPE_MAX),
+			sizeof(sec_charging_current_t), GFP_KERNEL);
+	if (!pdata->charging_current)
+		return -ENOMEM;
 
 	for (i = 0; i < len; i++) {
 		ret = of_property_read_u32_index(np,
