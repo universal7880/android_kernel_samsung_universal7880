@@ -15,7 +15,12 @@ if VIDEO_EXYNOS
 	source "drivers/media/platform/exynos/hevc/Kconfig"
 	source "drivers/media/platform/exynos/fimg2d_v5/Kconfig"
 	source "drivers/media/platform/exynos/smfc/Kconfig"
+if SOC_EXYNOS7880
+	source "drivers/media/platform/exynos/fimc-is2-7880/Kconfig"
+endif
+if !SOC_EXYNOS7880
 	source "drivers/media/platform/exynos/fimc-is2/Kconfig"
+endif
 endif
 
 config MEDIA_EXYNOS

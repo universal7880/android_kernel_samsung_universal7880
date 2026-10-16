@@ -935,7 +935,7 @@ static int fimc_is_group_task_start(struct fimc_is_groupmgr *groupmgr,
 	}
 
 #ifndef ENABLE_IS_CORE
-	fpsimd_set_task_preserve(gtask->task);
+	fpsimd_set_task_using(gtask->task);
 #ifdef SET_CPU_AFFINITY
 	ret = set_cpus_allowed_ptr(gtask->task, cpumask_of(2));
 #endif

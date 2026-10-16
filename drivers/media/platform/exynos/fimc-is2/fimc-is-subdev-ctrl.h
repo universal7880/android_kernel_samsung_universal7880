@@ -71,12 +71,7 @@ enum fimc_is_ischain_subdev_id {
 };
 
 struct fimc_is_subdev_ops {
-#ifdef CONFIG_SOC_EXYNOS7880
-	int (*bypass)(struct fimc_is_subdev *subdev, void *device_data,
-		struct fimc_is_frame *frame, bool bypass);
-#else
 	int (*bypass)(void);
-#endif
 	int (*cfg)(struct fimc_is_subdev *subdev,
 		void *device_data,
 		struct fimc_is_frame *frame,

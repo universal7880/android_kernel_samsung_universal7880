@@ -43,7 +43,6 @@
 #include "fimc-is-interface-library.h"
 #include "hardware/fimc-is-hw-control.h"
 #endif
-#include <trace/events/exynos.h>
 
 #define CLUSTER_MIN_MASK			0x0000FFFF
 #define CLUSTER_MIN_SHIFT			0
@@ -496,7 +495,6 @@ static int fimc_is_tmu_notifier(struct notifier_block *nb,
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_THERMAL
 	exynos_ss_thermal(NULL, 0, cooling_device_name, resourcemgr->limited_fps);
-	trace_exynos_thermal(NULL, 0, cooling_device_name, resourcemgr->limited_fps);
 #endif
 	return ret;
 #else

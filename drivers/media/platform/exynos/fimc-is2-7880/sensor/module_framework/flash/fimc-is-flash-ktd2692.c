@@ -29,7 +29,7 @@
 #include "fimc-is-core.h"
 
 #if defined(CONFIG_LEDS_KTD2692)
-#include <linux/leds-ktd2692.h>
+#include <linux/leds/leds-ktd2692.h>
 extern int ktd2692_led_mode_ctrl(int state);
 #endif
 

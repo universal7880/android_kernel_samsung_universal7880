@@ -35,8 +35,3 @@ config CAMERA_MC_SCALER_VER2_USE
           use mc-scaler version 2(mcs param)
 
 source "drivers/media/platform/exynos/fimc-is2/hardware/api/Kconfig"
-
-config USE_HW_API_COMMON
-	bool "Use HW API Common library"
-	depends on SOC_EXYNOS7880
-	default y

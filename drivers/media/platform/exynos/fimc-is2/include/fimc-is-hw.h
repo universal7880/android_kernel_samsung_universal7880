@@ -20,11 +20,7 @@
 #elif defined(CONFIG_FIMC_IS_V3_11_0)
 #include "../ischain/fimc-is-v3_11_0/fimc-is-hw-chain.h"
 #elif defined(CONFIG_FIMC_IS_V5_10_0)
-#ifdef CONFIG_SOC_EXYNOS7880
-#include "../ischain/fimc-is-v5_10_0-7880/fimc-is-hw-chain.h"
-#else
 #include "../ischain/fimc-is-v5_10_0/fimc-is-hw-chain.h"
-#endif
 #endif
 
 #define CSI_VIRTUAL_CH_0	0

@@ -1411,7 +1411,7 @@ int lib_task_init(void)
 			return PTR_ERR(lib->task_taaisp[i].task);
 		}
 
-		fpsimd_set_task_preserve(lib->task_taaisp[i].task);
+		fpsimd_set_task_using(lib->task_taaisp[i].task);
 
 		/* TODO: consider task priority group worker */
 		param.sched_priority = lib_get_task_priority(i);
@@ -1777,9 +1777,9 @@ int fimc_is_load_bin(void)
 
 	set_os_system_funcs(os_system_funcs);
 	/* call start_up function for SDK binary */
-	fpsimd_set_as_user_current(1);
+	fpsimd_get();
 	((start_up_func_t)lib_isp)((void **)os_system_funcs);
-	fpsimd_set_as_user_current(0);
+	fpsimd_put();
 
 #ifdef USE_RTA_BINARY
 	/* load RTA library */
@@ -1811,9 +1811,9 @@ int fimc_is_load_bin(void)
 
 	set_os_system_funcs_for_rta(os_system_funcs);
 	/* call start_up function for RTA binary */
-	fpsimd_set_as_user_current(1);
+	fpsimd_get();
 	((rta_start_up_func_t)lib_rta)(NULL, (void **)os_system_funcs);
-	fpsimd_set_as_user_current(0);
+	fpsimd_put();
 #endif
 
 	ret = lib_support_init();
@@ -1932,9 +1932,9 @@ int fimc_is_load_bin(void)
 
 	set_os_system_funcs(os_system_funcs);
 	/* call start_up function for SDK binary */
-	fpsimd_set_as_user_current(1);
+	fpsimd_get();
 	((start_up_func_t)lib_isp)((void **)os_system_funcs);
-	fpsimd_set_as_user_current(0);
+	fpsimd_put();
 
 #ifdef USE_RTA_BINARY
 	/* load RTA library */
@@ -1966,9 +1966,9 @@ int fimc_is_load_bin(void)
 
 	set_os_system_funcs_for_rta(os_system_funcs);
 	/* call start_up function for RTA binary */
-	fpsimd_set_as_user_current(1);
+	fpsimd_get();
 	((rta_start_up_func_t)lib_rta)(NULL, (void **)os_system_funcs);
-	fpsimd_set_as_user_current(0);
+	fpsimd_put();
 #endif
 
 	ret = lib_support_init();

@@ -108,9 +108,6 @@ static const struct v4l2_subdev_ops subdev_ops = {
 	.video = &video_ops,
 };
 
-#ifdef CONFIG_SOC_EXYNOS7880
-#include "fimc-is-device-module-3p8-power-7880.h"
-#else
 static int sensor_module_3p8_power_setpin(struct platform_device *pdev,
 	struct exynos_platform_fimc_is_module *pdata)
 {
@@ -245,8 +242,6 @@ static int sensor_module_3p8_power_setpin(struct platform_device *pdev,
 	return 0;
 }
 
-#endif
-
 int sensor_module_3p8_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -257,10 +252,6 @@ int sensor_module_3p8_probe(struct platform_device *pdev)
 	struct sensor_open_extended *ext;
 	struct exynos_platform_fimc_is_module *pdata;
 	struct device *dev;
-#ifdef CONFIG_SOC_EXYNOS7880
-	struct device_node *af_np;
-	int power_index;
-#endif
 
 	BUG_ON(!fimc_is_dev);
 
@@ -272,17 +263,7 @@ int sensor_module_3p8_probe(struct platform_device *pdev)
 
 	dev = &pdev->dev;
 
-#ifdef CONFIG_SOC_EXYNOS7880
-	af_np = of_get_child_by_name(dev->of_node, "af");
-	power_index = af_np ? SENSOR_MODULE_3P8_WITH_ACTUATOR :
-			     SENSOR_MODULE_3P8_WITHOUT_ACTUATOR;
-	of_node_put(af_np);
-	ret = fimc_is_sensor_module_parse_dt(pdev, module_3p8_power_setpin[power_index]);
-	if (ret)
-		return ret;
-#else
 	fimc_is_sensor_module_parse_dt(pdev, sensor_module_3p8_power_setpin);
-#endif
 
 	pdata = dev_get_platdata(dev);
 	device = &core->sensor[pdata->id];

@@ -587,15 +587,19 @@ int sensor_module_3p8_probe(struct platform_device *pdev)
 
 	probe_info("%s use_pdaf(%d)\n", __func__, use_pdaf);
 
-	af_np = of_find_node_by_name(dev->of_node, "af");
+	af_np = of_get_child_by_name(dev->of_node, "af");
 	if (!af_np)
 		exist_actuator = SENSOR_MODULE_3P8_WITHOUT_ACTUATOR;
 	else
 		exist_actuator = SENSOR_MODULE_3P8_WITH_ACTUATOR;
 
+	of_node_put(af_np);
+
 	probe_info("%s exist_actuator(%d)\n", __func__, exist_actuator);
 
-	fimc_is_sensor_module_parse_dt(pdev, module_3p8_power_setpin[exist_actuator]);
+	ret = fimc_is_sensor_module_parse_dt(pdev, module_3p8_power_setpin[exist_actuator]);
+	if (ret)
+		return ret;
 
 	pdata = dev_get_platdata(dev);
 	device = &core->sensor[pdata->id];
