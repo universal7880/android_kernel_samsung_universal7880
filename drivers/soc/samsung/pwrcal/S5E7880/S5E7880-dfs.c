@@ -815,6 +815,8 @@ void dfs_set_clk_information(struct pwrcal_vclk_dfs *dfs)
 	void *dvfs_block;
 	struct ect_dvfs_domain *dvfs_domain;
 	struct dfs_table *dvfs_table;
+	struct pwrcal_clk **members;
+	unsigned int *rate_table;
 
 	dvfs_block = ect_get_block("DVFS");
 	if (dvfs_block == NULL)
@@ -825,35 +827,45 @@ void dfs_set_clk_information(struct pwrcal_vclk_dfs *dfs)
 		return;
 
 	dvfs_table = dfs->table;
-	dvfs_table->num_of_lv = dvfs_domain->num_of_level;
-	dvfs_table->num_of_members = dvfs_domain->num_of_clock + 1;
-	dvfs_table->max_freq = dvfs_domain->max_frequency;
-	dvfs_table->min_freq = dvfs_domain->min_frequency;
+	members = kcalloc(dvfs_domain->num_of_clock + 1, sizeof(*members), GFP_KERNEL);
+	if (!members)
+		goto err;
 
-	dvfs_table->members = kzalloc(sizeof(struct pwrcal_clk *) * (dvfs_domain->num_of_clock + 1), GFP_KERNEL);
-	if (dvfs_table->members == NULL)
-		return;
-
-	dvfs_table->members[0] = REPRESENT_RATE;
+	members[0] = REPRESENT_RATE;
 	for (i = 0; i < dvfs_domain->num_of_clock; ++i) {
-		dvfs_table->members[i + 1] = clk_find(dvfs_domain->list_clock[i]);
-		if (dvfs_table->members[i + 1] == NULL)
-			return;
+		members[i + 1] = clk_find(dvfs_domain->list_clock[i]);
+		if (members[i + 1] == NULL)
+			goto err_members;
 	}
 
-	dvfs_table->rate_table = kzalloc(sizeof(unsigned int) * (dvfs_domain->num_of_clock + 1) * dvfs_domain->num_of_level, GFP_KERNEL);
-	if (dvfs_table->rate_table == NULL)
-		return;
+	rate_table = kcalloc(dvfs_domain->num_of_level,
+			    sizeof(*rate_table) * (dvfs_domain->num_of_clock + 1),
+			    GFP_KERNEL);
+	if (!rate_table)
+		goto err_members;
 
 	for (i = 0; i < dvfs_domain->num_of_level; ++i) {
 
-		dvfs_table->rate_table[i * (dvfs_domain->num_of_clock + 1)] = dvfs_domain->list_level[i].level;
+		rate_table[i * (dvfs_domain->num_of_clock + 1)] = dvfs_domain->list_level[i].level;
 		for (j = 0; j < dvfs_domain->num_of_clock; ++j) {
-			dvfs_table->rate_table[i * (dvfs_domain->num_of_clock + 1) + j + 1] =
+			rate_table[i * (dvfs_domain->num_of_clock + 1) + j + 1] =
 				dvfs_domain->list_dvfs_value[i * dvfs_domain->num_of_clock + j];
 		}
 	}
 
+	/* Publish the table only after all members and rates are available. */
+	dvfs_table->members = members;
+	dvfs_table->rate_table = rate_table;
+	dvfs_table->num_of_lv = dvfs_domain->num_of_level;
+	dvfs_table->num_of_members = dvfs_domain->num_of_clock + 1;
+	dvfs_table->max_freq = dvfs_domain->max_frequency;
+	dvfs_table->min_freq = dvfs_domain->min_frequency;
+	return;
+
+err_members:
+	kfree(members);
+err:
+	pr_err("%s: failed to initialize %s\n", __func__, dfs->vclk.name);
 }
 void dfs_init(void)
 {
