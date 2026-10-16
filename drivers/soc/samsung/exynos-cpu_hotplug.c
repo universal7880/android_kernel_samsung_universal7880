@@ -388,7 +388,11 @@ static ssize_t store_cpu_hotplug_enable(struct kobject *kobj,
 }
 
 static struct kobj_attribute cpu_hotplug_enabled =
+#ifdef CONFIG_SOC_EXYNOS7880
+__ATTR(enabled, 0644, show_cpu_hotplug_enable, store_cpu_hotplug_enable);
+#else
 __ATTR(enable, 0644, show_cpu_hotplug_enable, store_cpu_hotplug_enable);
+#endif
 
 static struct attribute *cpu_hotplug_attrs[] = {
 	&control_online_cpus.attr,
