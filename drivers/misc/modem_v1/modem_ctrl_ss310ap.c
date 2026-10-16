@@ -22,6 +22,10 @@
 #include <linux/mcu_ipc.h>
 #include <soc/samsung/exynos-pmu.h>
 #include <linux/modem_notifier.h>
+#ifdef CONFIG_SOC_EXYNOS7880
+#include <linux/clk.h>
+#include <linux/mutex.h>
+#endif
 #include <soc/samsung/pmu-cp.h>
 
 #include "modem_prj.h"
@@ -138,6 +142,34 @@ static void cp_active_handler(void *arg)
 	}
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+static int get_system_rev(struct device_node *np)
+{
+	int value, cnt, gpio_cnt;
+	unsigned gpio_hw_rev, hw_rev = 0;
+
+	gpio_cnt = of_gpio_count(np);
+	if (gpio_cnt < 0) {
+		mif_err("failed to get gpio_count from DT(%d)\n", gpio_cnt);
+		return gpio_cnt;
+	}
+
+	for (cnt = 0; cnt < gpio_cnt; cnt++) {
+		gpio_hw_rev = of_get_gpio(np, cnt);
+		if (!gpio_is_valid(gpio_hw_rev)) {
+			mif_err("gpio_hw_rev%d: Invalied gpio\n", cnt);
+			return -EINVAL;
+		}
+
+		value = gpio_get_value(gpio_hw_rev);
+		hw_rev |= (value & 0x1) << cnt;
+	}
+
+	return hw_rev;
+}
+
+#endif
+
 #ifdef CONFIG_GPIO_DS_DETECT
 static int get_ds_detect(struct device_node *np)
 {
@@ -163,6 +195,57 @@ static int get_ds_detect(struct device_node *np)
 }
 #endif
 
+#ifdef CONFIG_SOC_EXYNOS7880
+struct ss310ap_qch {
+	struct clk *clk;
+	struct mutex lock;
+	bool enabled;
+};
+
+static int ss310ap_qch_enable(struct modem_ctl *mc)
+{
+	struct ss310ap_qch *qch = mc->qch_cp;
+	int ret = 0;
+
+	mutex_lock(&qch->lock);
+	if (!qch->enabled) {
+		ret = clk_prepare_enable(qch->clk);
+		if (!ret)
+			qch->enabled = true;
+	}
+	mutex_unlock(&qch->lock);
+	return ret;
+}
+
+static void ss310ap_qch_disable(void *data)
+{
+	struct ss310ap_qch *qch = data;
+
+	mutex_lock(&qch->lock);
+	if (qch->enabled) {
+		clk_disable_unprepare(qch->clk);
+		qch->enabled = false;
+	}
+	mutex_unlock(&qch->lock);
+}
+
+static int ss310ap_qch_init(struct modem_ctl *mc)
+{
+	struct ss310ap_qch *qch;
+
+	qch = devm_kzalloc(mc->dev, sizeof(*qch), GFP_KERNEL);
+	if (!qch)
+		return -ENOMEM;
+	qch->clk = devm_clk_get(mc->dev, "qch_cp");
+	if (IS_ERR(qch->clk))
+		return PTR_ERR(qch->clk);
+	mutex_init(&qch->lock);
+	mc->qch_cp = qch;
+	return devm_add_action(mc->dev, ss310ap_qch_disable, qch);
+}
+#endif
+
+#ifndef CONFIG_SOC_EXYNOS7880
 static int sys_rev = 0;
 
 static int __init mif_get_hw_rev(char *arg)
@@ -171,6 +254,7 @@ static int __init mif_get_hw_rev(char *arg)
     return 0;
 }
 early_param("androidboot.revision", mif_get_hw_rev);
+#endif
 
 static int init_mailbox_regs(struct modem_ctl *mc)
 {
@@ -178,6 +262,9 @@ static int init_mailbox_regs(struct modem_ctl *mc)
 	struct device_node *np = pdev->dev.of_node;
 	unsigned int info_val, val;
 	int ds_det, i;
+#ifdef CONFIG_SOC_EXYNOS7880
+	int sys_rev;
+#endif
 
 	for (i = 0; i < MAX_MBOX_NUM; i++)
 		mbox_set_value(MCU_CP, i, 0);
@@ -185,6 +272,10 @@ static int init_mailbox_regs(struct modem_ctl *mc)
 	if (np) {
 		mif_dt_read_u32(np, "mbx_ap2cp_info_value", info_val);
 
+
+#ifdef CONFIG_SOC_EXYNOS7880
+		sys_rev = get_system_rev(np);
+#endif
 		ds_det = get_ds_detect(np);
 		if (sys_rev < 0 || ds_det < 0)
 			return -EINVAL;
@@ -233,6 +324,11 @@ static int ss310ap_on(struct modem_ctl *mc)
 	msleep(300);
 	ret = change_cp_pmu_manual_reset();
 	mif_info("change_mr_reset -> %d\n", ret);
+#ifdef CONFIG_SOC_EXYNOS7880
+	ret = ss310ap_qch_enable(mc);
+	if (ret)
+		return ret;
+#endif
 
 #ifdef CONFIG_UART_SEL
 	mif_err("Recheck UART direction.\n");
@@ -247,6 +343,9 @@ static int ss310ap_off(struct modem_ctl *mc)
 {
 	mif_info("+++\n");
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	ss310ap_qch_disable(mc->qch_cp);
+#endif
 	exynos_set_cp_power_onoff(CP_POWER_OFF);
 
 	mif_info("---\n");
@@ -277,6 +376,9 @@ static int ss310ap_shutdown(struct modem_ctl *mc)
 	}
 
 exit:
+#ifdef CONFIG_SOC_EXYNOS7880
+	ss310ap_qch_disable(mc->qch_cp);
+#endif
 	exynos_set_cp_power_onoff(CP_POWER_OFF);
 	mif_info("---\n");
 	return 0;
@@ -442,6 +544,11 @@ static int ss310ap_dump_start(struct modem_ctl *mc)
 		return err;
 
 	exynos_cp_release();
+#ifdef CONFIG_SOC_EXYNOS7880
+	err = ss310ap_qch_enable(mc);
+	if (err)
+		return err;
+#endif
 
 	mbox_set_value(MCU_CP, mc->mbx_ap_status, 1);
 
@@ -518,6 +625,23 @@ int ss310ap_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	struct resource __maybe_unused *sysram_alive;
 	unsigned long flags = IRQF_NO_SUSPEND | IRQF_NO_THREAD;
 	unsigned int cp_rst_n ;
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	ret = ss310ap_qch_init(mc);
+	if (ret)
+		return ret;
+	if (shm_get_sysram_size() < 0x800)
+		return -EINVAL;
+	mc->sysram_alive = shm_request_region(shm_get_sysram_base(),
+					shm_get_sysram_size());
+	if (!mc->sysram_alive)
+		return -ENOMEM;
+	ret = devm_add_action(&pdev->dev, shm_release_region, mc->sysram_alive);
+	if (ret) {
+		shm_release_region(mc->sysram_alive);
+		return ret;
+	}
+#endif
 
 	mif_info("+++\n");
 

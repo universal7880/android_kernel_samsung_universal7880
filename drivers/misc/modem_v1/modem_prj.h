@@ -572,6 +572,9 @@ struct modem_ctl {
 
 	struct modem_shared *msd;
 	void __iomem *sysram_alive;
+#ifdef CONFIG_SOC_EXYNOS7880
+	struct ss310ap_qch *qch_cp;
+#endif
 
 	enum modem_state phone_state;
 	struct sim_state sim_state;
