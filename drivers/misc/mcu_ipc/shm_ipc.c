@@ -125,6 +125,8 @@ void __iomem *shm_request_region(unsigned long sh_addr, unsigned size)
 		return NULL;
 
 	pages = kmalloc(sizeof(struct page *) * num_pages, GFP_ATOMIC);
+	if (!pages)
+		return NULL;
 
 	for (i = 0; i < (num_pages); i++) {
 		pages[i] = phys_to_page(sh_addr);
