@@ -1667,6 +1667,14 @@ err_ft:
 	free_intermediate_frame(ctx);
 	return -EINVAL;
 }
+#ifdef CONFIG_SOC_EXYNOS7880
+
+/*
+ * GET_DSIZE_BY_RATIO(x, y) calculates dst size by src size and ratio.
+ * x is src size, y is scaling ratio.
+ */
+#define GET_DSIZE_BY_RATIO(x, y)	SCALE_RATIO(x, y)
+#endif
 
 static int sc_find_scaling_ratio(struct sc_ctx *ctx)
 {
@@ -1761,14 +1769,30 @@ static int sc_find_scaling_ratio(struct sc_ctx *ctx)
 	}
 
 	if ((ctx->cp_enabled) && (h_ratio > sc_down_min)) {
+#ifdef CONFIG_SOC_EXYNOS7880
+		dev_info(sc->dev, "%s: %d h_ratio is not supported on drm\n",
+				__func__, h_ratio);
+		ctx->d_frame.crop.width =
+			GET_DSIZE_BY_RATIO(src_width, sc_down_min);
+		h_ratio = sc_down_min;
+#else
 		dev_err(sc->dev, "Out of width range on protect(%d->%d)\n",
 				src_width, ctx->d_frame.crop.width);
 		return -EINVAL;
+#endif
 	}
 	if ((ctx->cp_enabled) && (v_ratio > sc_down_min)) {
+#ifdef CONFIG_SOC_EXYNOS7880
+		dev_info(sc->dev, "%s: %d v_ratio is not supported on drm\n",
+				__func__, v_ratio);
+		ctx->d_frame.crop.height =
+			GET_DSIZE_BY_RATIO(src_height, sc_down_min);
+		v_ratio = sc_down_min;
+#else
 		dev_err(sc->dev, "Out of height range on protect(%d->%d)\n",
 				src_height, ctx->d_frame.crop.height);
 		return -EINVAL;
+#endif
 	}
 
 	if ((h_ratio > sc_down_min) || (v_ratio > sc_down_min)) {
@@ -1991,6 +2015,37 @@ static unsigned int sc_get_src_blend_pixelformat(struct sc_ctx *ctx,
 	}
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+enum {
+	MSCL_EMPTY,
+	MSCL_CP_REQ
+};
+
+static struct sc_dev *g_sc_0;
+static DECLARE_WAIT_QUEUE_HEAD(scaler_cp_ready_wq);
+static DECLARE_WAIT_QUEUE_HEAD(scaler_cp_sync_wq);
+static unsigned long scaler_cp_state = BIT(MSCL_EMPTY);
+static atomic_t cp_ref_cnt = ATOMIC_INIT(0);
+
+static void scaler_wait_done(struct sc_ctx *ctx)
+{
+	struct sc_dev *sc = ctx->sc_dev;
+
+	if (ctx->cp_enabled) {
+		set_bit(MSCL_CP_REQ, &scaler_cp_state);
+		wait_event(scaler_cp_ready_wq,
+				test_bit(MSCL_EMPTY, &scaler_cp_state));
+		atomic_inc(&cp_ref_cnt);
+		clear_bit(MSCL_CP_REQ, &scaler_cp_state);
+		wake_up(&scaler_cp_sync_wq);
+	} else {
+		atomic_dec(&cp_ref_cnt);
+	}
+	dev_info(sc->dev, "%s cp_enabled = %d, cp_refcnt = %d\n",
+			__func__, ctx->cp_enabled, atomic_read(&cp_ref_cnt));
+}
+#endif
+
 static int sc_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct sc_ctx *ctx;
@@ -2083,7 +2138,16 @@ static int sc_s_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->csc.csc_range = ctrl->val;
 		break;
 	case V4L2_CID_CONTENT_PROTECTION:
+#ifdef CONFIG_SOC_EXYNOS7880
+		if (ctrl->val && !g_sc_0)
+			return -ENODEV;
+		if (ctx->cp_enabled != !!ctrl->val) {
+			ctx->cp_enabled = !!ctrl->val;
+			scaler_wait_done(ctx);
+		}
+#else
 		ctx->cp_enabled = !!ctrl->val;
+#endif
 		break;
 	case SC_CID_DNOISE_FT:
 		ctx->dnoise_ft.strength = ctrl->val;
@@ -2492,6 +2556,13 @@ static int sc_release(struct file *file)
 
 	sc_dbg("refcnt= %d", atomic_read(&sc->m2m.in_use));
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (ctx->cp_enabled) {
+		atomic_dec(&cp_ref_cnt);
+		dev_info(sc->dev, "%s cp_enabled = %d, cp_refcnt = %d\n",
+			__func__, ctx->cp_enabled, atomic_read(&cp_ref_cnt));
+	}
+#endif
 	atomic_dec(&sc->m2m.in_use);
 
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
@@ -2536,13 +2607,22 @@ static const struct v4l2_file_operations sc_v4l2_fops = {
 
 static void sc_job_finish(struct sc_dev *sc, struct sc_ctx *ctx)
 {
+	struct sc_dev *queue_dev = sc;
 	unsigned long flags;
 	struct vb2_buffer *src_vb, *dst_vb;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	queue_dev = ctx->sc_dev;
+#endif
 	spin_lock_irqsave(&sc->slock, flags);
+#ifdef CONFIG_SOC_EXYNOS7880
+
+	if ((!test_bit(DEV_CP, &sc->state)) && sc->cp_nosysmmu)
+		iovmm_deactivate(sc->dev);
+#endif
 
 	if (ctx->context_type == SC_CTX_V4L2_TYPE) {
-		ctx = v4l2_m2m_get_curr_priv(sc->m2m.m2m_dev);
+		ctx = v4l2_m2m_get_curr_priv(queue_dev->m2m.m2m_dev);
 		if (!ctx || !ctx->m2m_ctx) {
 			dev_err(sc->dev, "current ctx is NULL\n");
 			spin_unlock_irqrestore(&sc->slock, flags);
@@ -2565,14 +2645,14 @@ static void sc_job_finish(struct sc_dev *sc, struct sc_ctx *ctx)
 		v4l2_m2m_buf_done(src_vb, VB2_BUF_STATE_ERROR);
 		v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_ERROR);
 
-		v4l2_m2m_job_finish(sc->m2m.m2m_dev, ctx->m2m_ctx);
+		v4l2_m2m_job_finish(queue_dev->m2m.m2m_dev, ctx->m2m_ctx);
 	} else {
 		struct m2m1shot_task *task =
-			m2m1shot_get_current_task(sc->m21dev);
+			m2m1shot_get_current_task(queue_dev->m21dev);
 
 		BUG_ON(ctx->context_type != SC_CTX_M2M1SHOT_TYPE);
 
-		m2m1shot_task_finish(sc->m21dev, task, true);
+		m2m1shot_task_finish(queue_dev->m21dev, task, true);
 	}
 
 	spin_unlock_irqrestore(&sc->slock, flags);
@@ -2614,13 +2694,11 @@ static void sc_watchdog(unsigned long arg)
 
 }
 
-static void sc_set_csc_coef(struct sc_ctx *ctx)
+static void sc_set_csc_coef(struct sc_dev *sc, struct sc_ctx *ctx)
 {
 	struct sc_frame *s_frame, *d_frame;
-	struct sc_dev *sc;
 	enum sc_csc_idx idx;
 
-	sc = ctx->sc_dev;
 	s_frame = &ctx->s_frame;
 	d_frame = &ctx->d_frame;
 
@@ -2717,9 +2795,8 @@ static bool sc_process_2nd_stage(struct sc_dev *sc, struct sc_ctx *ctx)
 	return true;
 }
 
-static void sc_set_dithering(struct sc_ctx *ctx)
+static void sc_set_dithering(struct sc_dev *sc, struct sc_ctx *ctx)
 {
-	struct sc_dev *sc = ctx->sc_dev;
 	unsigned int val = 0;
 
 	if (ctx->dith)
@@ -2791,10 +2868,8 @@ static void sc_set_prefetch_buffers(struct sc_dev *sc, struct sc_ctx *ctx)
 	sysmmu_set_prefetch_buffer_by_region(sc->dev, pb_reg, i);
 }
 
-static void sc_set_initial_phase(struct sc_ctx *ctx)
+static void sc_set_initial_phase(struct sc_dev *sc, struct sc_ctx *ctx)
 {
-	struct sc_dev *sc = ctx->sc_dev;
-
 	/* TODO: need to check scaling, csc, rot according to H/W Goude  */
 	sc_hwset_src_init_phase(sc, &ctx->init_phase);
 }
@@ -2817,6 +2892,12 @@ static int sc_run_next_job(struct sc_dev *sc)
 
 	if (sc->current_ctx || list_empty(&sc->context_list)) {
 		/* a job is currently being processed or no job is to run */
+#ifdef CONFIG_SOC_EXYNOS7880
+		if (sc->dev_id == 1 && list_empty(&sc->context_list)) {
+			set_bit(MSCL_EMPTY, &scaler_cp_state);
+			wake_up(&scaler_cp_ready_wq);
+		}
+#endif
 		spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
 		return 0;
 	}
@@ -2851,7 +2932,7 @@ static int sc_run_next_job(struct sc_dev *sc)
 		d_frame = &ctx->i_frame->frame;
 	}
 
-	sc_set_csc_coef(ctx);
+	sc_set_csc_coef(sc, ctx);
 
 	sc_hwset_src_image_format(sc, s_frame->sc_fmt);
 	sc_hwset_dst_image_format(sc, d_frame->sc_fmt);
@@ -2916,12 +2997,12 @@ static int sc_run_next_job(struct sc_dev *sc)
 	sc_hwset_dst_wh(sc, d_frame->crop.width, d_frame->crop.height);
 
 	if (sc->variant->initphase)
-		sc_set_initial_phase(ctx);
+		sc_set_initial_phase(sc, ctx);
 
 	sc_hwset_src_addr(sc, &s_frame->addr);
 	sc_hwset_dst_addr(sc, &d_frame->addr);
 
-	sc_set_dithering(ctx);
+	sc_set_dithering(sc, ctx);
 	if (ctx->bl_op) {
 		if (sc->variant->blending) {
 			src_blend_frame = &ctx->src_blend_frame;
@@ -2974,6 +3055,12 @@ static int sc_run_next_job(struct sc_dev *sc)
 			set_bit(DEV_CP, &sc->state);
 	}
 #endif
+#ifdef CONFIG_SOC_EXYNOS7880
+
+	if (!ctx->cp_enabled && sc->cp_nosysmmu)
+		iovmm_activate(sc->dev);
+
+#endif
 	sc_hwset_start(sc);
 
 	return 0;
@@ -2983,11 +3070,29 @@ static int sc_add_context_and_run(struct sc_dev *sc, struct sc_ctx *ctx)
 {
 	unsigned long flags;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (sc->dev_id == 1 && test_bit(MSCL_CP_REQ, &scaler_cp_state))
+		wait_event(scaler_cp_sync_wq,
+				!test_bit(MSCL_CP_REQ, &scaler_cp_state));
+	if (!atomic_read(&cp_ref_cnt)) {
+		spin_lock_irqsave(&sc->ctxlist_lock, flags);
+		list_add_tail(&ctx->node, &sc->context_list);
+		if (sc->dev_id == 1)
+			clear_bit(MSCL_EMPTY, &scaler_cp_state);
+		spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
+		return sc_run_next_job(sc);
+	} else {
+		spin_lock_irqsave(&g_sc_0->ctxlist_lock, flags);
+		list_add_tail(&ctx->node, &g_sc_0->context_list);
+		spin_unlock_irqrestore(&g_sc_0->ctxlist_lock, flags);
+		return sc_run_next_job(g_sc_0);
+	}
+#else
 	spin_lock_irqsave(&sc->ctxlist_lock, flags);
 	list_add_tail(&ctx->node, &sc->context_list);
 	spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
-
 	return sc_run_next_job(sc);
+#endif
 }
 
 static irqreturn_t sc_irq_handler(int irq, void *priv)
@@ -3016,6 +3121,11 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 
 	del_timer(&sc->wdt.timer);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if ((!test_bit(DEV_CP, &sc->state)) && sc->cp_nosysmmu)
+		iovmm_deactivate(sc->dev);
+
+#endif
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
 	if (test_bit(DEV_CP, &sc->state)) {
 		sc_ctrl_protection(sc, ctx, false);
@@ -3027,7 +3137,11 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 	clear_bit(CTX_RUN, &ctx->flags);
 
 	if (ctx->context_type == SC_CTX_V4L2_TYPE) {
+#ifdef CONFIG_SOC_EXYNOS7880
+		BUG_ON(ctx != v4l2_m2m_get_curr_priv(ctx->sc_dev->m2m.m2m_dev));
+#else
 		BUG_ON(ctx != v4l2_m2m_get_curr_priv(sc->m2m.m2m_dev));
+#endif
 
 		src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 		dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
@@ -3055,7 +3169,11 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 			sc_dbg("wake up blocked process by suspend\n");
 			wake_up(&sc->wait);
 		} else {
+#ifdef CONFIG_SOC_EXYNOS7880
+			v4l2_m2m_job_finish(ctx->sc_dev->m2m.m2m_dev, ctx->m2m_ctx);
+#else
 			v4l2_m2m_job_finish(sc->m2m.m2m_dev, ctx->m2m_ctx);
+#endif
 		}
 
 		/* Wake up from CTX_ABORT state */
@@ -3063,7 +3181,11 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 			wake_up(&sc->wait);
 	} else {
 		struct m2m1shot_task *task =
+#ifdef CONFIG_SOC_EXYNOS7880
+					m2m1shot_get_current_task(ctx->sc_dev->m21dev);
+#else
 					m2m1shot_get_current_task(sc->m21dev);
+#endif
 
 		BUG_ON(ctx->context_type != SC_CTX_M2M1SHOT_TYPE);
 
@@ -3072,7 +3194,11 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 				(unsigned long)ktime_us_delta(
 					ktime_get(), ctx->ktime_m2m1shot);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+		m2m1shot_task_finish(ctx->sc_dev->m21dev, task,
+#else
 		m2m1shot_task_finish(sc->m21dev, task,
+#endif
 					SCALER_INT_OK(irq_status));
 	}
 
@@ -3088,9 +3214,10 @@ isr_unlock:
 	return IRQ_HANDLED;
 }
 
-static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
+static int sc_get_bufaddr(struct sc_ctx *ctx, struct vb2_buffer *vb2buf,
 		struct sc_frame *frame, struct sc_frame *src_blend_frame)
 {
+	struct sc_dev *sc = ctx->sc_dev;
 	int ret;
 	unsigned int pixsize, bytesize, src_blend_pixsize;
 	void *cookie;
@@ -3102,7 +3229,7 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 	if (!cookie)
 		return -EINVAL;
 
-	ret = sc_get_dma_address(cookie, &frame->addr.y);
+	ret = sc_get_dma_address(ctx, cookie, &frame->addr.y);
 	if (ret != 0)
 		return ret;
 
@@ -3141,7 +3268,7 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 			if (!cookie)
 				return -EINVAL;
 
-			ret = sc_get_dma_address(cookie, &frame->addr.cb);
+			ret = sc_get_dma_address(ctx, cookie, &frame->addr.cb);
 			if (ret != 0)
 				return ret;
 			frame->addr.ysize =
@@ -3182,7 +3309,7 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 			cookie = vb2_plane_cookie(vb2buf, 1);
 			if (!cookie)
 				return -EINVAL;
-			ret = sc_get_dma_address(cookie, &frame->addr.cb);
+			ret = sc_get_dma_address(ctx, cookie, &frame->addr.cb);
 			if (ret != 0)
 				return ret;
 			cookie = vb2_plane_cookie(vb2buf, 2);
@@ -3192,7 +3319,7 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 			if (frame->sc_fmt->is_alphablend_fmt) {
 				BUG_ON(!sc->variant->blending);
 				BUG_ON(src_blend_frame == NULL);
-				ret = sc_get_dma_address(cookie,
+				ret = sc_get_dma_address(ctx, cookie,
 						&src_blend_frame->addr.y);
 				src_blend_pixsize =
 					src_blend_frame->width *
@@ -3216,7 +3343,7 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 						src_blend_frame->addr.ysize);
 				return 0;
 			}
-			ret = sc_get_dma_address(cookie, &frame->addr.cr);
+			ret = sc_get_dma_address(ctx, cookie, &frame->addr.cr);
 			if (ret != 0)
 				return ret;
 			frame->addr.ysize =
@@ -3232,7 +3359,7 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 					return -EINVAL;
 				BUG_ON(!sc->variant->blending);
 				BUG_ON(src_blend_frame == NULL);
-				ret = sc_get_dma_address(cookie,
+				ret = sc_get_dma_address(ctx, cookie,
 						&src_blend_frame->addr.y);
 				src_blend_pixsize =
 					src_blend_frame->width *
@@ -3287,7 +3414,7 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 					return -EINVAL;
 				BUG_ON(!sc->variant->blending);
 				BUG_ON(src_blend_frame == NULL);
-				ret = sc_get_dma_address(cookie,
+				ret = sc_get_dma_address(ctx, cookie,
 						&src_blend_frame->addr.y);
 				src_blend_pixsize =
 					src_blend_frame->width *
@@ -3357,15 +3484,15 @@ static void sc_m2m_device_run(void *priv)
 		ctx->src_blend_cfg.blend_src_crop_width = d_frame->crop.width;
 		ctx->src_blend_cfg.blend_src_crop_height = d_frame->crop.height;
 
-		sc_get_bufaddr(sc, v4l2_m2m_next_src_buf(ctx->m2m_ctx),
+		sc_get_bufaddr(ctx, v4l2_m2m_next_src_buf(ctx->m2m_ctx),
 							s_frame,
 							src_blend_frame);
 	} else {
-		sc_get_bufaddr(sc, v4l2_m2m_next_src_buf(ctx->m2m_ctx),
+		sc_get_bufaddr(ctx, v4l2_m2m_next_src_buf(ctx->m2m_ctx),
 							s_frame,
 							NULL);
 	}
-	sc_get_bufaddr(sc, v4l2_m2m_next_dst_buf(ctx->m2m_ctx), d_frame, NULL);
+	sc_get_bufaddr(ctx, v4l2_m2m_next_dst_buf(ctx->m2m_ctx), d_frame, NULL);
 
 	sc_add_context_and_run(sc, ctx);
 }
@@ -4000,6 +4127,11 @@ static int sc_runtime_resume(struct device *dev)
 	if (sc->qosreq_int_level > 0)
 		pm_qos_update_request(&sc->qosreq_int, sc->qosreq_int_level);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	iovmm_activate(dev);
+	iovmm_deactivate(dev);
+
+#endif
 	return 0;
 }
 
@@ -4121,11 +4253,25 @@ static int sc_probe(struct platform_device *pdev)
 				(u32 *)&sc->cfw))
 		sc->cfw = 0;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (of_property_read_u32(pdev->dev.of_node, "mscl,cp-nosysmmu",
+				(u32 *)&sc->cp_nosysmmu))
+		sc->cp_nosysmmu = 0;
+
+	if (!sc->cp_nosysmmu) {
+		ret = vb2_ion_attach_iommu(sc->alloc_ctx);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to vb2 ion attach iommu\n");
+			goto err_iommu;
+		}
+	}
+#else
 	ret = vb2_ion_attach_iommu(sc->alloc_ctx);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to vb2 ion attach iommu\n");
 		goto err_iommu;
 	}
+#endif
 
 	ret = pm_runtime_get_sync(&pdev->dev);
 	if (ret < 0) {
@@ -4185,6 +4331,11 @@ static int sc_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev,
 		"Driver probed successfully(version: %08x(%x))\n",
 		hwver, sc->version);
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (sc->dev_id == 0)
+		g_sc_0 = sc;
+
+#endif
 
 	return 0;
 err_ver_aclk_get:
@@ -4193,7 +4344,12 @@ err_ver_aclk_get:
 err_ver_pclk_get:
 	pm_runtime_put(&pdev->dev);
 err_ver_rpm_get:
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (!sc->cp_nosysmmu)
+		vb2_ion_detach_iommu(sc->alloc_ctx);
+#else
 	vb2_ion_detach_iommu(sc->alloc_ctx);
+#endif
 err_iommu:
 	if (sc->qosreq_int_level > 0)
 		pm_qos_remove_request(&sc->qosreq_int);
@@ -4214,7 +4370,12 @@ static int sc_remove(struct platform_device *pdev)
 
 	destroy_workqueue(sc->fence_wq);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (!sc->cp_nosysmmu)
+		vb2_ion_detach_iommu(sc->alloc_ctx);
+#else
 	vb2_ion_detach_iommu(sc->alloc_ctx);
+#endif
 
 	vb2_ion_destroy_context(sc->alloc_ctx);
 
