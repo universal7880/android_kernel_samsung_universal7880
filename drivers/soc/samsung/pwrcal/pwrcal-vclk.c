@@ -1067,6 +1067,10 @@ int vclk_enable(struct vclk *vclk)
 		pr_warn("vclk retenction fail (%s) (%ld)\n",
 				vclk->name, vclk->vfreq);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (vclk->type == vclk_group_dfs)
+		vclk->vfreq = tmp;
+#endif
 out:
 	if (!ret) {
 		exynos_ss_clk(vclk, name, ESS_FLAG_OUT);
