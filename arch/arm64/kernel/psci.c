@@ -511,7 +511,11 @@ static int psci_suspend_customized_finisher(unsigned long index)
 		state.affinity_level = 3;
 		break;
 	case PSCI_SYSTEM_CP_CALL:
+#ifdef CONFIG_SOC_EXYNOS7880
+		state.affinity_level = 2;
+#else
 		state.affinity_level = 1;
+#endif
 		break;
 	default:
 		panic("Unsupported psci state, index = %ld\n", index);
