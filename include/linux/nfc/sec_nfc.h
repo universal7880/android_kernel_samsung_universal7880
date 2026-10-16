@@ -69,6 +69,7 @@ struct sec_nfc_platform_data {
 	int pvdd_1p8_gpio;
 	int i2c_1p8_gpio;
 	struct regulator *regulator_pvdd_1p8;
+	bool pvdd_enabled;
 
 	int firm;
 	int wake;
