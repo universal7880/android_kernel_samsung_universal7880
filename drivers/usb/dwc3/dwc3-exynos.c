@@ -723,10 +723,15 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 #endif
 	ret = dwc3_exynos_clk_get(exynos);
 	if (ret)
-		return ret;
+		goto err_qos;
 
-	dwc3_exynos_clk_prepare(exynos);
-	dwc3_exynos_clk_enable(exynos);
+	ret = dwc3_exynos_clk_prepare(exynos);
+	if (ret)
+		goto err_qos;
+
+	ret = dwc3_exynos_clk_enable(exynos);
+	if (ret)
+		goto err_unprepare;
 
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
@@ -817,8 +822,15 @@ err3:
 err2:
 	pm_runtime_disable(&pdev->dev);
 	dwc3_exynos_clk_disable(exynos);
-	dwc3_exynos_clk_unprepare(exynos);
 	pm_runtime_set_suspended(&pdev->dev);
+err_unprepare:
+	dwc3_exynos_clk_unprepare(exynos);
+err_qos:
+#ifdef CONFIG_PM_DEVFREQ
+	if (exynos->int_min_lock)
+		pm_qos_remove_request(&exynos_usb_int_qos);
+#endif
+	exynos_update_ip_idle_status(exynos->idle_ip_index, 1);
 	return ret;
 }
 
@@ -846,6 +858,11 @@ static int dwc3_exynos_remove(struct platform_device *pdev)
 	typec_unregister_partner(exynos->typec->partner);
 	typec_unregister_port(exynos->typec->port);
 #endif
+#ifdef CONFIG_PM_DEVFREQ
+	if (exynos->int_min_lock)
+		pm_qos_remove_request(&exynos_usb_int_qos);
+#endif
+	exynos_update_ip_idle_status(exynos->idle_ip_index, 1);
 
 	return 0;
 }
