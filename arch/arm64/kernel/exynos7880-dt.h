@@ -10,6 +10,12 @@ struct exynos7880_dt_board {
 	unsigned int revision;
 };
 
+#ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+int __init exynos7880_dt_select(const void *catalogue, unsigned long size,
+				const struct exynos7880_dt_board *board,
+				const void **bootstrap, const void **selected);
+#endif
+
 #ifdef CONFIG_SOC_EXYNOS7880
 int __init exynos7880_dt_identify(const void *fdt,
 				struct exynos7880_dt_board *board);

@@ -19,6 +19,7 @@
 
 / {
 	model = "Samsung A7Y17 KOR ALL rev01 board based on Exynos 7880";
+	samsung,board-id = "a7y17lte-kor";
 	model_info-chip = <7880>;
 	model_info-platform = "android";
 	model_info-subtype = "samsung";

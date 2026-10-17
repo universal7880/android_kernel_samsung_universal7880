@@ -223,9 +223,24 @@ static bool __init identify_board_fdt(void *fdt)
 		pr_err("exynos7880: invalid bootstrap board identity (%d)\n", ret);
 		return false;
 	}
-	if (ret > 0)
+	if (ret > 0) {
+#ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+		const void *bootstrap, *selected;
+
+		ret = exynos7880_dt_select(__dtb_start,
+					   __dtb_end - __dtb_start,
+					   &board, &bootstrap, &selected);
+		if (ret) {
+			pr_err("exynos7880: board DT lookup failed (%d)\n",
+			       ret);
+			return false;
+		}
+#endif
 		pr_info("exynos7880: bootstrap for %s (%c), hardware revision %u\n",
 			board.model, board.variant, board.revision);
+		pr_err("exynos7880: refusing an unconfigured bootstrap DT\n");
+		return false;
+	}
 
 	return true;
 }

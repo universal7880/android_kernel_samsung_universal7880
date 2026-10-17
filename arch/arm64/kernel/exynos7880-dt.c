@@ -130,3 +130,114 @@ int __init exynos7880_dt_identify(const void *fdt,
 	*board = identified;
 	return 1;
 }
+
+#ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+static const char *__init
+board_config_id(const struct exynos7880_dt_board *board)
+{
+	if (!strcmp(board->model, "a5y17lte")) {
+		switch (board->variant) {
+		case 'F':
+			return "a5y17lte-eur";
+		case 'W':
+			return "a5y17lte-can";
+		case 'K':
+		case 'L':
+		case 'S':
+			return "a5y17lte-kor";
+		}
+	} else if (!strcmp(board->model, "a7y17lte")) {
+		switch (board->variant) {
+		case 'F':
+			return "a7y17lte-eur";
+		case 'S':
+			return "a7y17lte-kor";
+		}
+	}
+	return NULL;
+}
+
+static int __init read_revision(const void *fdt, const char *name,
+				unsigned int *revision)
+{
+	const uint32_t *value;
+	int length;
+
+	value = fdt_getprop(fdt, 0, name, &length);
+	if (!value || length != sizeof(*value))
+		return -EINVAL;
+	*revision = fdt32_to_cpu(*value);
+	return *revision <= 255 ? 0 : -ERANGE;
+}
+
+/* Catalogue DTBs are generated from the existing board sources by Kbuild. */
+int __init exynos7880_dt_select(const void *catalogue, unsigned long size,
+				const struct exynos7880_dt_board *board,
+				const void **bootstrap, const void **selected)
+{
+	const char *cursor = catalogue;
+	const void *base = NULL, *match = NULL;
+	const char *id = board_config_id(board), *value;
+	unsigned long bytes, padded, i;
+	unsigned int first, last;
+	int length, ret;
+
+	if (!id)
+		return -ENODEV;
+	while (size) {
+		/* Other built-in DTBs may have stronger section alignment. */
+		if (!*cursor) {
+			bytes = size < 8 ? size : 8;
+			for (i = 0; i < bytes; i++)
+				if (cursor[i])
+					return -EINVAL;
+			cursor += bytes;
+			size -= bytes;
+			continue;
+		}
+		if (size < FDT_V17_SIZE || fdt_check_header(cursor))
+			return -EINVAL;
+		bytes = fdt_totalsize(cursor);
+		if (bytes < FDT_V17_SIZE || bytes > size)
+			return -EINVAL;
+		padded = (bytes + 7) & ~7UL;
+		if (padded > size)
+			return -EINVAL;
+
+		ret = fdt_node_check_compatible(cursor, 0,
+						"samsung,exynos7880-bootstrap");
+		if (!ret) {
+			if (base)
+				return -EINVAL;
+			base = cursor;
+		}
+		value = fdt_getprop(cursor, 0, "samsung,board-id", &length);
+		if (value && length == strlen(id) + 1 &&
+		    !memcmp(value, id, length)) {
+			ret = read_revision(cursor, "model_info-hw_rev",
+					    &first);
+			if (ret)
+				return ret;
+			ret = read_revision(cursor, "model_info-hw_rev_end",
+					    &last);
+			if (ret)
+				return ret;
+			if (first > last)
+				return -EINVAL;
+			if (board->revision >= first &&
+			    board->revision <= last) {
+				if (match)
+					return -EINVAL;
+				match = cursor;
+			}
+		}
+		cursor += padded;
+		size -= padded;
+	}
+	if (!base || !match)
+		return -ENODEV;
+	*bootstrap = base;
+	*selected = match;
+	return 0;
+}
+#endif

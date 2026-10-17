@@ -13,5 +13,6 @@
 
 / {
 	model = "Samsung A5Y17 LTE CAN rev02 board based on Exynos 7880";
+	samsung,board-id = "a5y17lte-can";
 	compatible = "samsung, A5Y17 LTE CAN OPEN 02", "samsung,exynos7880";
 };

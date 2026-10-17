@@ -62,6 +62,16 @@ config MCINFO_SYSFS
 	depends on EXYNOS_MCINFO
 	default	y if SYSFS
 
+config EXYNOS7880_BOARD_DTBS
+	bool "Built-in A5/A7 2017 board device trees"
+	depends on SOC_EXYNOS7880 && OF_EARLY_FLATTREE
+	help
+	  Embed the A5/A7 EUR, CAN and KOR device trees and the shared
+	  bootstrap in the kernel's init section. This provides the board
+	  catalogue for early model and hardware revision selection.
+	  It does not change the DTBH image used by the bootloader or
+	  apply the selected board tree to the shared bootstrap.
+
 config EXYNOS_PM_DVS
 	bool "Exynos suspend voltage control"
 	depends on SOC_EXYNOS7880 && REGULATOR

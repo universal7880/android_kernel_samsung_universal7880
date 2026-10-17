@@ -1,0 +1,31 @@
+Samsung Galaxy A5/A7 2017 board selection
+=======================================
+
+Board DT root property:
+
+- samsung,board-id: one of "a5y17lte-eur", "a5y17lte-can",
+  "a5y17lte-kor", "a7y17lte-eur" or "a7y17lte-kor".
+
+This identifies the model and regional configuration independently of the
+human-readable model name. Existing model_info-hw_rev and
+model_info-hw_rev_end properties give the inclusive hardware revision range.
+The region is not interchangeable with the hardware revision.
+
+The shared bootstrap uses compatible "samsung,a5a7y17lte". Its original
+/chosen/bootargs supplies androidboot.bootloader and androidboot.hw_rev.
+A520F selects A5 EUR, A520W A5 CAN, A520K/L/S A5 KOR, A720F A7 EUR and
+A720S A7 KOR. Unknown models and ambiguous revision matches are rejected.
+Live demo unit descriptions are not part of the board catalogue.
+
+CONFIG_EXYNOS7880_BOARD_DTBS embeds the existing regional DTBs and the
+unmodified bootstrap in .dtb.init.rodata, using the standard kernel DTB
+linker section. The catalogue is separate from the DTBH image and is
+released with the kernel's init memory. It adds no new compiler or library
+dependency. It is disabled in the regular device defconfigs.
+
+This is a staged implementation: identification and catalogue lookup do not
+yet apply the selected DT. An unconfigured bootstrap is rejected before
+memory scanning. The bootstrap is not a bootable replacement for
+the existing per-device images. Before enabling it, retain all bootloader
+updates to the FDT, including memory, reservations, chosen and ECT data,
+and validate the resulting tree before memory scanning.

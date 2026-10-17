@@ -18,6 +18,7 @@
 
 / {
 	model = "Samsung A5Y17 LTE EUR rev02 board based on Exynos 7880";
+	samsung,board-id = "a5y17lte-eur";
 	model_info-chip = <7880>;
 	model_info-platform = "android";
 	model_info-subtype = "samsung";
