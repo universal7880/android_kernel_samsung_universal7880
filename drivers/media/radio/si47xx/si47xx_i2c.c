@@ -388,7 +388,8 @@ static long si47xx_ioctl(struct file *filp, unsigned int ioctl_cmd,
 		break;
 
 	case SI47XX_IOC_SEEK_CANCEL:
-		if (si47xx_dev_wait_flag == SEEK_WAITING) {
+		if (si47xx_dev_wait_flag == SEEK_WAITING ||
+		    si47xx_dev_wait_flag == TUNE_WAITING) {
 			si47xx_dev_wait_flag = SEEK_CANCEL;
 			wake_up_interruptible(&si47xx_waitq);
 		}
