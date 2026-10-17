@@ -11,6 +11,10 @@ struct exynos7880_dt_board {
 };
 
 #ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+int __init exynos7880_dt_validate(const void *dt, unsigned long size);
+int __init exynos7880_dt_compose(const void *input, unsigned long input_size,
+				 const void *bootstrap, const void *selected,
+				 void *out, unsigned int out_size);
 int __init exynos7880_dt_select(const void *catalogue, unsigned long size,
 				const struct exynos7880_dt_board *board,
 				const void **bootstrap, const void **selected);

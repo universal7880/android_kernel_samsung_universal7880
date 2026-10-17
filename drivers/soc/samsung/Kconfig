@@ -69,8 +69,9 @@ config EXYNOS7880_BOARD_DTBS
 	  Embed the A5/A7 EUR, CAN and KOR device trees and the shared
 	  bootstrap in the kernel's init section. This provides the board
 	  catalogue for early model and hardware revision selection.
-	  It does not change the DTBH image used by the bootloader or
-	  apply the selected board tree to the shared bootstrap.
+	  Recognized firmware boot data is preserved when preparing the
+	  selected board tree, before early memory scanning. Unknown changes
+	  are rejected. This does not change the bootloader DTBH image.
 
 config EXYNOS_PM_DVS
 	bool "Exynos suspend voltage control"

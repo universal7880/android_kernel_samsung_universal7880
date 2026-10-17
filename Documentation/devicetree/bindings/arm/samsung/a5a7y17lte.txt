@@ -23,9 +23,26 @@ linker section. The catalogue is separate from the DTBH image and is
 released with the kernel's init memory. It adds no new compiler or library
 dependency. It is disabled in the regular device defconfigs.
 
-This is a staged implementation: identification and catalogue lookup do not
-yet apply the selected DT. An unconfigured bootstrap is rejected before
-memory scanning. The bootstrap is not a bootable replacement for
-the existing per-device images. Before enabling it, retain all bootloader
-updates to the FDT, including memory, reservations, chosen and ECT data,
-and validate the resulting tree before memory scanning.
+The selected board tree is completed before early memory scanning. Firmware
+changes are obtained by comparing the incoming bootstrap with its pristine
+catalogue copy. Recognized changes to chosen, memory, reserved-memory, ECT,
+serial-number and MAC properties are replayed onto the selected board tree.
+The header reservation map and boot CPU ID are preserved as well.
+
+DT structure checks use libfdt 1.7.2 with its upstream trailing-NOP fix.
+Board selection additionally rejects duplicate paths and properties,
+overlapping data blocks, overflowing reservations and excessive nesting.
+
+This is deliberately not a general overlay mechanism. Unknown firmware
+changes, changes to phandle declarations, incompatible boot-data layouts,
+ambiguous identities and malformed trees are rejected. Board-specific
+phandles remain those of the selected complete DT, rather than being merged
+from a different model. The prepared DT occupies a permanent 512 KiB buffer:
+flat-tree consumers can retain pointers after init memory has been freed.
+
+This remains a staged implementation. It does not change DTBH packaging or
+create a unified ROM product, and the bootstrap is not included in regular
+per-device DTBH images. Before enabling it, check the final kernel size and
+bootloader memory placement, and validate firmware changes and board
+selection on physical A5 and A7 devices. Ordinary device trees continue to
+use their existing hardware descriptions.

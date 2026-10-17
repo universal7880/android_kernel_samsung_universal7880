@@ -43,6 +43,9 @@
 #include <linux/of_platform.h>
 #include <linux/efi.h>
 #include <linux/personality.h>
+#ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+#include <linux/libfdt.h>
+#endif
 
 #include <asm/fixmap.h>
 #include <asm/cpu.h>
@@ -214,41 +217,71 @@ static void __init smp_build_mpidr_hash(void)
 	__flush_dcache_area(&mpidr_hash, sizeof(struct mpidr_hash));
 }
 
-static bool __init identify_board_fdt(void *fdt)
+#ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+/* Flat-DT consumers, including reserved-memory names, outlive init. */
+static unsigned char board_fdt[512 * 1024] __aligned(8);
+#endif
+
+static void *__init prepare_board_fdt(void *fdt)
 {
 	struct exynos7880_dt_board board;
-	int ret = exynos7880_dt_identify(fdt, &board);
+	int ret;
 
+	if ((unsigned long)fdt & 7)
+		return NULL;
+#ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+	ret = exynos7880_dt_validate(fdt, fdt_totalsize(fdt));
+	if (ret) {
+		pr_err("exynos7880: malformed firmware DT (%d)\n", ret);
+		return NULL;
+	}
+#endif
+	ret = exynos7880_dt_identify(fdt, &board);
 	if (ret < 0) {
 		pr_err("exynos7880: invalid bootstrap board identity (%d)\n", ret);
-		return false;
+		return NULL;
 	}
-	if (ret > 0) {
+	if (!ret) {
 #ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+		pr_err("exynos7880: board DT catalogue requires the A5/A7 bootstrap\n");
+		return NULL;
+#else
+		return fdt;
+#endif
+	}
+#ifdef CONFIG_EXYNOS7880_BOARD_DTBS
+	{
 		const void *bootstrap, *selected;
 
 		ret = exynos7880_dt_select(__dtb_start,
 					   __dtb_end - __dtb_start,
 					   &board, &bootstrap, &selected);
+		if (!ret)
+			ret = exynos7880_dt_compose(fdt,
+						    fdt_totalsize(fdt),
+						    bootstrap, selected,
+						    board_fdt,
+						    sizeof(board_fdt));
 		if (ret) {
-			pr_err("exynos7880: board DT lookup failed (%d)\n",
+			pr_err("exynos7880: board DT preparation failed (%d)\n",
 			       ret);
-			return false;
+			return NULL;
 		}
-#endif
-		pr_info("exynos7880: bootstrap for %s (%c), hardware revision %u\n",
-			board.model, board.variant, board.revision);
-		pr_err("exynos7880: refusing an unconfigured bootstrap DT\n");
-		return false;
 	}
-
-	return true;
+	pr_info("exynos7880: prepared %s (%c), hardware revision %u\n",
+		board.model, board.variant, board.revision);
+	return board_fdt;
+#else
+	pr_err("exynos7880: bootstrap requires the board DT catalogue\n");
+	return NULL;
+#endif
 }
 
 static void __init setup_machine_fdt(phys_addr_t dt_phys)
 {
-	if (!dt_phys || !identify_board_fdt(phys_to_virt(dt_phys)) ||
-	    !early_init_dt_scan(phys_to_virt(dt_phys))) {
+	void *fdt = dt_phys ? prepare_board_fdt(phys_to_virt(dt_phys)) : NULL;
+
+	if (!fdt || !early_init_dt_scan(fdt)) {
 		early_print("\n"
 			"Error: invalid device tree blob at physical address 0x%p (virtual address 0x%p)\n"
 			"The dtb must be 8-byte aligned and passed in the first 512MB of memory\n"
