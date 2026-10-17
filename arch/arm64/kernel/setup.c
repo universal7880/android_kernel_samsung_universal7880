@@ -60,6 +60,8 @@
 #include <asm/psci.h>
 #include <asm/efi.h>
 
+#include "exynos7880-dt.h"
+
 #if defined(CONFIG_ECT)
 #include <soc/samsung/ect_parser.h>
 #endif
@@ -212,9 +214,26 @@ static void __init smp_build_mpidr_hash(void)
 	__flush_dcache_area(&mpidr_hash, sizeof(struct mpidr_hash));
 }
 
+static bool __init identify_board_fdt(void *fdt)
+{
+	struct exynos7880_dt_board board;
+	int ret = exynos7880_dt_identify(fdt, &board);
+
+	if (ret < 0) {
+		pr_err("exynos7880: invalid bootstrap board identity (%d)\n", ret);
+		return false;
+	}
+	if (ret > 0)
+		pr_info("exynos7880: bootstrap for %s (%c), hardware revision %u\n",
+			board.model, board.variant, board.revision);
+
+	return true;
+}
+
 static void __init setup_machine_fdt(phys_addr_t dt_phys)
 {
-	if (!dt_phys || !early_init_dt_scan(phys_to_virt(dt_phys))) {
+	if (!dt_phys || !identify_board_fdt(phys_to_virt(dt_phys)) ||
+	    !early_init_dt_scan(phys_to_virt(dt_phys))) {
 		early_print("\n"
 			"Error: invalid device tree blob at physical address 0x%p (virtual address 0x%p)\n"
 			"The dtb must be 8-byte aligned and passed in the first 512MB of memory\n"

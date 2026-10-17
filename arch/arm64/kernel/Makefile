@@ -5,6 +5,7 @@
 CPPFLAGS_vmlinux.lds	:= -DTEXT_OFFSET=$(TEXT_OFFSET)
 AFLAGS_head.o		:= -DTEXT_OFFSET=$(TEXT_OFFSET)
 CFLAGS_efi-stub.o 	:= -DTEXT_OFFSET=$(TEXT_OFFSET)
+CFLAGS_exynos7880-dt.o := -I$(srctree)/scripts/dtc/libfdt
 CFLAGS_armv8_deprecated.o := -I$(src)
 
 CFLAGS_REMOVE_ftrace.o = -pg
@@ -33,6 +34,7 @@ arm64-obj-$(CONFIG_CPU_IDLE)		+= cpuidle.o
 arm64-obj-$(CONFIG_JUMP_LABEL)		+= jump_label.o
 arm64-obj-$(CONFIG_KGDB)		+= kgdb.o
 arm64-obj-$(CONFIG_ARCH_EXYNOS)		+= exynos-smc.o
+arm64-obj-$(CONFIG_SOC_EXYNOS7880)		+= exynos7880-dt.o
 arm64-obj-$(CONFIG_EFI)			+= efi.o efi-stub.o efi-entry.o
 arm64-obj-$(CONFIG_TIMA_RKP)		+= rkp_entry.o
 arm64-obj-$(CONFIG_PCI)			+= pci.o
