@@ -338,11 +338,17 @@ static u16 freq_to_channel(u32 frequency)
 
 /* Only one thread will be able to call this, since this function call is
    protected by a mutex, so no race conditions can arise */
-static void wait(void)
+static int wait(unsigned int timeout_ms)
 {
-	wait_event_interruptible(si47xx_waitq,
+	long ret;
+
+	ret = wait_event_interruptible_timeout(si47xx_waitq,
 		(si47xx_dev_wait_flag == WAIT_OVER) ||
-		(si47xx_dev_wait_flag == SEEK_CANCEL));
+		(si47xx_dev_wait_flag == SEEK_CANCEL),
+		msecs_to_jiffies(timeout_ms));
+	if (ret > 0)
+		return 0;
+	return ret ? ret : -ETIMEDOUT;
 }
 
 #ifndef CONFIG_FM_SI47XX_RDS_INT_ON_ALWAYS
@@ -536,7 +542,11 @@ static int seek(u32 *frequency, int up, int mode)
 
 	si47xx_dev_wait_flag = SEEK_WAITING;
 	ret = fmSeekStart(up, mode); /* mode 0 is full scan */
-	wait();
+	if (ret < 0)
+		goto failed;
+	ret = wait(20000);
+	if (ret < 0)
+		goto cancel;
 	
 	if (si47xx_dev_wait_flag == SEEK_CANCEL) {
 		ret = fmTuneStatus(1, 1, &tune_data);
@@ -571,6 +581,13 @@ static int seek(u32 *frequency, int up, int mode)
 	 }
  
 	return ret;
+
+cancel:
+	fmTuneStatus(1, 1, &tune_data);
+failed:
+	*frequency = 0;
+	si47xx_dev_wait_flag = NO_WAIT;
+	return ret;
 }
 
 static int tune_freq(u32 frequency)
@@ -585,8 +602,16 @@ static int tune_freq(u32 frequency)
 
 	si47xx_dev_wait_flag = TUNE_WAITING;
 	ret = fmTuneFreq(frequency);
+	if (ret < 0)
+		goto out;
 	pr_debug("%s(): frequency=%d wait\n", __func__, frequency);
-	wait();
+	ret = wait(3000);
+	if (ret < 0 || si47xx_dev_wait_flag == SEEK_CANCEL) {
+		if (!ret)
+			ret = -ECANCELED;
+		fmTuneStatus(1, 1, &tune_data);
+		goto out;
+	}
 	si47xx_dev_wait_flag = NO_WAIT;
 	pr_debug("%s(): frequency=%d\n", __func__, frequency);
 
@@ -600,6 +625,8 @@ static int tune_freq(u32 frequency)
 
 	ret = fmTuneStatus(0, 1, &tune_data);
 
+out:
+	si47xx_dev_wait_flag = NO_WAIT;
 	mutex_unlock(&(si47xx_dev->lock));
 
 	return ret;
