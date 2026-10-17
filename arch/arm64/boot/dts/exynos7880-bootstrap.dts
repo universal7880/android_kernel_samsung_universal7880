@@ -1,0 +1,25 @@
+/*
+ * SAMSUNG Exynos7880 A5/A7 bootstrap device tree source
+ *
+ * Copyright (c) 2015 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+
+/dts-v1/;
+#include "exynos7880-common.dtsi"
+
+/* Board configuration must be selected before initializing peripherals. */
+/ {
+	model = "Samsung A5/A7 2017 bootstrap board based on Exynos 7880";
+	compatible = "samsung,exynos7880-bootstrap", "samsung,exynos7880";
+	model_info-chip = <7880>;
+	model_info-platform = "android";
+	model_info-subtype = "samsung";
+	model_info-hw_rev = <0>;
+	model_info-hw_rev_end = <255>;
+};
