@@ -21,7 +21,8 @@ CONFIG_EXYNOS7880_BOARD_DTBS embeds the existing regional DTBs and the
 unmodified bootstrap in .dtb.init.rodata, using the standard kernel DTB
 linker section. The catalogue is separate from the DTBH image and is
 released with the kernel's init memory. It adds no new compiler or library
-dependency. It is disabled in the regular device defconfigs.
+dependency. This WIP branch enables it directly in
+lineage-universal7880_defconfig.
 
 The selected board tree is completed before early memory scanning. Firmware
 changes are obtained by comparing the incoming bootstrap with its pristine
@@ -40,9 +41,20 @@ phandles remain those of the selected complete DT, rather than being merged
 from a different model. The prepared DT occupies a permanent 512 KiB buffer:
 flat-tree consumers can retain pointers after init memory has been freed.
 
-This remains a staged implementation. It does not change DTBH packaging or
-create a unified ROM product, and the bootstrap is not included in regular
-per-device DTBH images. Before enabling it, check the final kernel size and
-bootloader memory placement, and validate firmware changes and board
+With this option enabled, the dtbs target exports only the bootstrap for
+DTBH packaging. When switching modes, dtbs removes inactive generated A5/A7 DTBs
+from the output directory so a directory-scanning packer cannot include a
+stale board description. Source DTS files and the embedded catalogue are
+not removed. Run dtbs after changing the configuration.
+
+The experimental product must use its own DTBH_MODEL filter, "A5A7-2017".
+The bootstrap model contains this identifier. Existing A5Y17 and A7Y17
+filters intentionally reject it and remain appropriate for separate builds.
+Keep the existing DTBH version, chip, platform and subtype values; the
+bootstrap covers hardware revisions 0 through 255 in one entry.
+
+This remains a staged implementation: the unified ROM product and its DTBH
+header are not wired up yet. Before enabling it, check the final kernel size
+and bootloader memory placement, and validate firmware changes and board
 selection on physical A5 and A7 devices. Ordinary device trees continue to
 use their existing hardware descriptions.
