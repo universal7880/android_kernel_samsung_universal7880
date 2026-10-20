@@ -62,7 +62,7 @@ static int s2mu004_usbpd_reg_init(struct s2mu004_usbpd_data *_data);
 static void s2mu004_dfp(struct i2c_client *i2c);
 static void s2mu004_ufp(struct i2c_client *i2c);
 #ifdef CONFIG_CCIC_VDM
-static int s2mu004_usbpd_check_vdm_msg(void *_data, int *val);
+static int s2mu004_usbpd_check_vdm_msg(void *_data, u64 *val);
 #endif
 static void s2mu004_src(struct i2c_client *i2c);
 static void s2mu004_snk(struct i2c_client *i2c);
@@ -1040,7 +1040,7 @@ static void s2mu004_usbpd_set_rp_scr_sel(struct s2mu004_usbpd_data *pdic_data,
 #endif
 
 #ifdef CONFIG_CCIC_VDM
-int s2mu004_usbpd_check_vdm_msg(void *_data, int *val)
+int s2mu004_usbpd_check_vdm_msg(void *_data, u64 *val)
 {
 	struct usbpd_data *data = (struct usbpd_data *) _data;
 	int vdm_command = 0;
