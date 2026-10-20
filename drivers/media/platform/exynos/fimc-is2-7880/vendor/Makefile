@@ -1,3 +1,3 @@
-obj-$(CONFIG_VENDER_DEFAULT) += default/
-obj-$(CONFIG_VENDER_MCD) += mcd/
-obj-$(CONFIG_VENDER_PSV) += psv/
+obj-$(CONFIG_FIMC_IS_7880_VENDOR_DEFAULT) += default/
+obj-$(CONFIG_FIMC_IS_7880_VENDOR_MCD) += mcd/
+obj-$(CONFIG_FIMC_IS_7880_VENDOR_PSV) += psv/

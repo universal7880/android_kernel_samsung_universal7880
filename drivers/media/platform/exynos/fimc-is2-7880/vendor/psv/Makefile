@@ -1,4 +1,4 @@
-obj-$(CONFIG_VENDER_PSV) := fimc-is-vender.o \
+obj-$(CONFIG_FIMC_IS_7880_VENDOR_PSV) := fimc-is-vender.o \
 
 obj-$(CONFIG_PSV_SFR_VERIFICATION) += fimc-is-sfr.o
 obj-$(CONFIG_PSV_VECTOR_VERIFICATION) += fimc-is-vector.o

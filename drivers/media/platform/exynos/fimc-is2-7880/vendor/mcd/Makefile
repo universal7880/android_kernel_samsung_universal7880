@@ -1,4 +1,4 @@
-obj-$(CONFIG_VENDER_MCD) := fimc-is-vender.o \
+obj-$(CONFIG_FIMC_IS_7880_VENDOR_MCD) := fimc-is-vender.o \
 				fimc-is-sec-define.o \
 				crc32.o \
 				fimc-is-sysfs.o \

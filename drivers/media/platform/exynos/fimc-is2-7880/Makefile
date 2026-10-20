@@ -63,14 +63,14 @@ subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2-7880/hardware
 subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2-7880/hardware/api
 subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2-7880/vendor
 subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2-7880/sensor/csi
-subdir-ccflags-$(CONFIG_FIMC_IS_V3_1_1) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v3_1_1
-subdir-ccflags-$(CONFIG_FIMC_IS_V3_11_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v3_11_0
-subdir-ccflags-$(CONFIG_FIMC_IS_V3_20_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v3_20_0
-subdir-ccflags-$(CONFIG_FIMC_IS_V4_0_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v4_0_0
-subdir-ccflags-$(CONFIG_FIMC_IS_V4_3_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v4_3_0
-subdir-ccflags-$(CONFIG_FIMC_IS_V5_10_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v5_10_0
+subdir-ccflags-$(CONFIG_FIMC_IS_7880_V3_1_1) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v3_1_1
+subdir-ccflags-$(CONFIG_FIMC_IS_7880_V3_11_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v3_11_0
+subdir-ccflags-$(CONFIG_FIMC_IS_7880_V3_20_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v3_20_0
+subdir-ccflags-$(CONFIG_FIMC_IS_7880_V4_0_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v4_0_0
+subdir-ccflags-$(CONFIG_FIMC_IS_7880_V4_3_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v4_3_0
+subdir-ccflags-$(CONFIG_FIMC_IS_7880_V5_10_0) += -Idrivers/media/platform/exynos/fimc-is2-7880/ischain/fimc-is-v5_10_0
 
-ifeq ($(CONFIG_VENDER_MCD),y)
+ifeq ($(CONFIG_FIMC_IS_7880_VENDOR_MCD),y)
 subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2-7880/vendor/mcd
 else
 subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2-7880/vendor/default

@@ -282,7 +282,7 @@ int fimc_is_interface_3aa_probe(struct fimc_is_interface_ischain *itfc,
 		return -EINVAL;
 	}
 
-#ifndef CONFIG_VENDER_PSV
+#ifndef CONFIG_FIMC_IS_7880_VENDOR_PSV
 	ret = fimc_is_hw_request_irq(itf_3aa, hw_id);
 	if (ret) {
 		err_itfc("[ID:%2d] hw_request_irq failed (%d)", hw_id, ret);
@@ -361,7 +361,7 @@ int fimc_is_interface_isp_probe(struct fimc_is_interface_ischain *itfc,
 		return -EINVAL;
 	}
 
-#ifndef CONFIG_VENDER_PSV
+#ifndef CONFIG_FIMC_IS_7880_VENDOR_PSV
 	ret = fimc_is_hw_request_irq(itf_isp, hw_id);
 	if (ret) {
 		err_itfc("[ID:%2d] hw_request_irq failed (%d)", hw_id, ret);
@@ -438,7 +438,7 @@ int fimc_is_interface_tpu_probe(struct fimc_is_interface_ischain *itfc,
 		return -EINVAL;
 	}
 
-#ifndef CONFIG_VENDER_PSV
+#ifndef CONFIG_FIMC_IS_7880_VENDOR_PSV
 	ret = fimc_is_hw_request_irq(itf_tpu, hw_id);
 	if (ret) {
 		err_itfc("[ID:%2d] hw_request_irq failed (%d)", hw_id, ret);
@@ -509,7 +509,7 @@ int fimc_is_interface_scaler_probe(struct fimc_is_interface_ischain *itfc,
 		return -EINVAL;
 	}
 
-#ifndef CONFIG_VENDER_PSV
+#ifndef CONFIG_FIMC_IS_7880_VENDOR_PSV
 	ret = fimc_is_hw_request_irq(itf_scaler, hw_id);
 	if (ret) {
 		err_itfc("[ID:%2d] hw_request_irq failed (%d)", hw_id, ret);
@@ -556,7 +556,7 @@ int fimc_is_interface_vra_probe(struct fimc_is_interface_ischain *itfc,
 		return -EINVAL;
 	}
 
-#ifndef CONFIG_VENDER_PSV
+#ifndef CONFIG_FIMC_IS_7880_VENDOR_PSV
 	ret = fimc_is_hw_request_irq(itf_vra, hw_id);
 	if (ret) {
 		err_itfc("[ID:%2d] hw_request_irq failed (%d)", hw_id, ret);

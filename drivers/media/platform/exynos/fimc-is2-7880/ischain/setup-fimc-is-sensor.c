@@ -525,7 +525,7 @@ int exynos7880_fimc_is_sensor_iclk_on(struct device *dev,
 		break;
 	}
 
-#if defined(CONFIG_VENDER_PSV)
+#if defined(CONFIG_FIMC_IS_7880_VENDOR_PSV)
 	/* ISP */
 	fimc_is_enable(dev, "gate_isp_sysmmu");
 	fimc_is_enable(dev, "gate_isp_ppmu");
@@ -551,7 +551,7 @@ int exynos7880_fimc_is_sensor_iclk_off(struct device *dev,
 	/* CSI */
 	exynos7880_fimc_is_csi_gate(dev, channel, true);
 
-#if defined(CONFIG_VENDER_PSV)
+#if defined(CONFIG_FIMC_IS_7880_VENDOR_PSV)
 	/* ISP */
 	fimc_is_disable(dev, "gate_isp_sysmmu");
 	fimc_is_disable(dev, "gate_isp_ppmu");

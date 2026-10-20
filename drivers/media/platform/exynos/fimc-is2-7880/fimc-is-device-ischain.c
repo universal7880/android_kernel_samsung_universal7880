@@ -2200,7 +2200,7 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 	struct fimc_is_core *core;
 	struct fimc_is_vender *vender;
 	struct fimc_is_interface *itf;
-#ifdef CONFIG_VENDER_MCD
+#ifdef CONFIG_FIMC_IS_7880_VENDOR_MCD
 	struct fimc_is_vender_specific *specific;
 #endif
 
@@ -2211,7 +2211,7 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 	core = (struct fimc_is_core *)platform_get_drvdata(device->pdev);
 	vender = &core->vender;
 	itf = device->interface;
-#ifdef CONFIG_VENDER_MCD
+#ifdef CONFIG_FIMC_IS_7880_VENDOR_MCD
 	specific = core->vender.private_data;
 #endif
 
@@ -2246,7 +2246,7 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 		}
 
 		if (core->current_position == SENSOR_POSITION_FRONT
-#ifdef CONFIG_VENDER_MCD
+#ifdef CONFIG_FIMC_IS_7880_VENDOR_MCD
 		|| specific->suspend_resume_disable
 #endif
 		) {
@@ -2310,7 +2310,7 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 			goto p_err;
 		}
 
-#ifdef CONFIG_VENDER_MCD
+#ifdef CONFIG_FIMC_IS_7880_VENDOR_MCD
 		if (specific->need_cold_reset)
 			specific->need_cold_reset = false;
 #endif

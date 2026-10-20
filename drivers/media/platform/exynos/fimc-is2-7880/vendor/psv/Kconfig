@@ -1,14 +1,14 @@
 config PSV_SFR_VERIFICATION
         bool "|-> Enable SFR verfication feature"
-        depends on VENDER_PSV
+        depends on FIMC_IS_7880_VENDOR_PSV
         default n
 
 config PSV_VECTOR_VERIFICATION
 		bool "|-> Enable vector verfication feature"
-		depends on VENDER_PSV
+		depends on FIMC_IS_7880_VENDOR_PSV
 		default n
 
 config PSV_ASB
 		bool "|-> Enable ASB feature"
-		depends on VENDER_PSV
+		depends on FIMC_IS_7880_VENDOR_PSV
 		default n

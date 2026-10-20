@@ -4,15 +4,15 @@ menu "Vendor Feature Setting"
 choice
 	prompt "Use vender features"
 	depends on EXYNOS_FIMC_IS
-	default VENDER_DEFAULT
+	default FIMC_IS_7880_VENDOR_DEFAULT
 	help
 	  Use the vender specific features.
 
-config VENDER_DEFAULT
+config FIMC_IS_7880_VENDOR_DEFAULT
         bool "Default"
-config VENDER_MCD
+config FIMC_IS_7880_VENDOR_MCD
         bool "MCD"
-config VENDER_PSV
+config FIMC_IS_7880_VENDOR_PSV
 		bool "PSV"
 endchoice
 

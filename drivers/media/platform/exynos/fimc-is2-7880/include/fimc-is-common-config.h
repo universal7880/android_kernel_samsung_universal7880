@@ -525,7 +525,7 @@
 	warn_common("[@][LIB][WARN]%d:", fmt "\n", __LINE__, ##args)
 #endif
 
-#if defined(CONFIG_VENDER_PSV)
+#if defined(CONFIG_FIMC_IS_7880_VENDOR_PSV)
 #if defined(DBG_PSV)
 #define dbg_psv(fmt, args...) \
 	dbg_common("[@][PSV] ", fmt, ##args)

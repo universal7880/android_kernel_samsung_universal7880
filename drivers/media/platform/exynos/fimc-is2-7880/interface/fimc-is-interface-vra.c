@@ -318,7 +318,7 @@ int fimc_is_lib_vra_alloc_memory(struct fimc_is_lib_vra *lib_vra, ulong dma_addr
 	u32 size;
 	enum api_vra_type status = VRA_NO_ERROR;
 	struct api_vra_alloc_info *alloc_info;
-#if !defined(CONFIG_FIMC_IS_V4_0_0)
+#if !defined(CONFIG_FIMC_IS_7880_V4_0_0)
 #if !defined(VRA_DMA_TEST_BY_IMAGE)
 	bool has_vra_ch1_only = false;
 	int ret = 0;
@@ -340,13 +340,13 @@ int fimc_is_lib_vra_alloc_memory(struct fimc_is_lib_vra *lib_vra, ulong dma_addr
 	alloc_info->ff_hw_res_per_face = 500;
 	alloc_info->ff_hw_res_per_list = VRA_FF_HW_RES_PER_LIST;
 	alloc_info->cache_line_length  = 32;
-#if defined(CONFIG_FIMC_IS_V4_0_0)
+#if defined(CONFIG_FIMC_IS_7880_V4_0_0)
 	alloc_info->pad_size = 0;
 	alloc_info->allow_3planes = 0;
-#elif defined(CONFIG_FIMC_IS_V3_11_0)		\
-	|| defined(CONFIG_FIMC_IS_V3_20_0)	\
-	|| defined(CONFIG_FIMC_IS_V5_10_0)	\
-	|| defined(CONFIG_FIMC_IS_V4_3_0)
+#elif defined(CONFIG_FIMC_IS_7880_V3_11_0)		\
+	|| defined(CONFIG_FIMC_IS_7880_V3_20_0)	\
+	|| defined(CONFIG_FIMC_IS_7880_V5_10_0)	\
+	|| defined(CONFIG_FIMC_IS_7880_V4_3_0)
 	alloc_info->use_pad = 1;
 	alloc_info->allow_ch0_2planes = 0;
 #if defined(VRA_DMA_TEST_BY_IMAGE)
