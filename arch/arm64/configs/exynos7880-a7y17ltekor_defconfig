@@ -1008,6 +1008,7 @@ CONFIG_RFKILL_PM=y
 # CONFIG_CAIF is not set
 # CONFIG_CEPH_LIB is not set
 # CONFIG_NFC is not set
+CONFIG_SAMSUNG_NFC=y
 
 #
 # Near Field Communication (NFC) devices
