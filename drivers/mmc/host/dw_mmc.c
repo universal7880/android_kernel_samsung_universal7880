@@ -2105,18 +2105,16 @@ static int dw_mci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 static void dw_mci_shutdown(struct mmc_host *mmc)
 {
 #ifdef CONFIG_MMC_DW_EXYNOS_EMMC_SHUTDOWN_POWERCTRL
-	int ret;
 	struct dw_mci_slot *slot = mmc_priv(mmc);
 	struct dw_mci *host = slot->host;
-	/* Notice : Powers are not turned off if EMMC_EN stays high */
 
-	if (regulator_is_enabled(host->vemmc))
-		ret = regulator_disable(host->vemmc);
+	/* Only hosts with mmc-shutdown-poweroff acquire these supplies. */
+	if (!IS_ERR_OR_NULL(host->vemmc) && regulator_is_enabled(host->vemmc) > 0)
+		regulator_disable(host->vemmc);
 
-	if (regulator_is_enabled(host->vqemmc))
-		ret = regulator_disable(host->vqemmc);
+	if (!IS_ERR_OR_NULL(host->vqemmc) && regulator_is_enabled(host->vqemmc) > 0)
+		regulator_disable(host->vqemmc);
 #endif
-	return;
 }
 
 
