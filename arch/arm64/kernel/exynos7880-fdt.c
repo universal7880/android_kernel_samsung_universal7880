@@ -251,6 +251,7 @@ static int __init boot_property(enum boot_node kind, const char *name,
 {
 	enum {
 		CELL,
+		DOUBLE_CELL,
 		ADDRESS,
 		CELLS,
 		STRING,
@@ -263,7 +264,9 @@ static int __init boot_property(enum boot_node kind, const char *name,
 
 	if (is_phandle(name))
 		return -EOPNOTSUPP;
-	if ((kind == BOOT_ROOT && !strcmp(name, "serial-number")) ||
+	if (kind == BOOT_ROOT && !strcmp(name, "model_info-system_rev")) {
+		type = STRING;
+	} else if ((kind == BOOT_ROOT && !strcmp(name, "serial-number")) ||
 	    !strcmp(name, "mac-address") ||
 	    !strcmp(name, "local-mac-address") ||
 	    !strcmp(name, "local-bd-address")) {
@@ -277,6 +280,10 @@ static int __init boot_property(enum boot_node kind, const char *name,
 		else if (!strcmp(name, "linux,initrd-start") ||
 			 !strcmp(name, "linux,initrd-end"))
 			type = ADDRESS;
+		else if (!strcmp(name, "revision"))
+			type = CELL;
+		else if (!strcmp(name, "serial"))
+			type = DOUBLE_CELL;
 		else if (!strcmp(name, "linux,usable-memory-range") ||
 			 !strcmp(name, "linux,elfcorehdr"))
 			type = CELLS;
@@ -328,6 +335,8 @@ static int __init boot_property(enum boot_node kind, const char *name,
 	switch (type) {
 	case CELL:
 		return length == 4 ? 0 : -EINVAL;
+	case DOUBLE_CELL:
+		return length == 8 ? 0 : -EINVAL;
 	case ADDRESS:
 		return length == 4 || length == 8 ? 0 : -EINVAL;
 	case CELLS:
