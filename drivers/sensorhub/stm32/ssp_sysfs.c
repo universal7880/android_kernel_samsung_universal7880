@@ -1073,6 +1073,15 @@ static struct device_attribute *mcu_attrs[] = {
 	NULL,
 };
 
+static int ssp_batch_change_delay(struct ssp_data *data, u8 sensor_type, u8 *buf)
+{
+	/* The A5/A7 firmware does not acknowledge CHANGE_DELAY commands. */
+	if (IS_ENABLED(CONFIG_SOC_EXYNOS7880))
+		return send_instruction(data, CHANGE_DELAY, sensor_type, buf, 9);
+
+	return send_instruction_sync(data, CHANGE_DELAY, sensor_type, buf, 9);
+}
+
 static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 				unsigned long arg)
 {
@@ -1129,8 +1138,7 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 			   MCU return fail when receive chage delay inst during NO_SENSOR STATE */
 			if (data->aiCheckStatus[sensor_type]
 					== RUNNING_SENSOR_STATE)
-				ret = send_instruction_sync(data, CHANGE_DELAY,
-						sensor_type, uBuf, 9);
+				ret = ssp_batch_change_delay(data, sensor_type, uBuf);
 
 			if (ret > 0) { /* ret 1 is success */
 				data->batch_opt[sensor_type] = (u8)batch.flag;
@@ -1138,8 +1146,7 @@ static long ssp_batch_ioctl(struct file *file, unsigned int cmd,
 				data->delay[sensor_type] = batch.delay;
 			}
 		} else { /* real batch, DRY RUN */
-			ret = send_instruction_sync(data, CHANGE_DELAY,
-						sensor_type, uBuf, 9);
+			ret = ssp_batch_change_delay(data, sensor_type, uBuf);
 			if (ret > 0) { /* ret 1 is success */
 				data->batch_opt[sensor_type] = (u8)batch.flag;
 				data->batch_max_latency[sensor_type] = timeout_ms;
