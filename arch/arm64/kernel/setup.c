@@ -220,6 +220,45 @@ static void __init smp_build_mpidr_hash(void)
 #ifdef CONFIG_EXYNOS7880_BOARD_DTBS
 /* Flat-DT consumers, including reserved-memory names, outlive init. */
 static unsigned char board_fdt[512 * 1024] __aligned(8);
+
+static void __init set_board_release(const struct exynos7880_dt_board *board)
+{
+	struct new_utsname *name = init_utsname();
+	const char *hash = strstr(name->release, "-g");
+	const char *dirty = hash && strstr(hash, "-dirty") ? "-dirty" : "";
+	const char *variant;
+	char release[sizeof(name->release)];
+	int prefix = hash ? hash - name->release : strlen(name->release);
+	int length;
+
+	switch (board->variant) {
+	case 'F':
+		variant = "xx";
+		break;
+	case 'W':
+		variant = "can";
+		break;
+	case 'K':
+		variant = "ktt";
+		break;
+	case 'L':
+		variant = "lgt";
+		break;
+	case 'S':
+		variant = "skt";
+		break;
+	default:
+		return;
+	}
+	length = snprintf(release, sizeof(release), "%.*s-7870q-%s%s%s",
+			  prefix, name->release, board->model, variant, dirty);
+	if (length >= sizeof(release)) {
+		pr_warn("exynos7880: board kernel release is too long\n");
+		return;
+	}
+	/* Keep the compiled release in the boot banner and module vermagic. */
+	strlcpy(name->release, release, sizeof(name->release));
+}
 #endif
 
 static void *__init prepare_board_fdt(void *fdt)
@@ -270,6 +309,7 @@ static void *__init prepare_board_fdt(void *fdt)
 	}
 	pr_info("exynos7880: prepared %s (%c), hardware revision %u\n",
 		board.model, board.variant, board.revision);
+	set_board_release(&board);
 	return board_fdt;
 #else
 	pr_err("exynos7880: bootstrap requires the board DT catalogue\n");
