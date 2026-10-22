@@ -338,6 +338,12 @@ static void mms_input_close(struct input_dev *dev)
 {
 	struct mms_ts_info *info = input_get_drvdata(dev);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	/* Display blanking and input disable may request the same transition. */
+	if (info->ic_status != PWR_ON)
+		return;
+#endif
+
 	input_info(true, &info->client->dev, "%s %s\n",
 			__func__, info->lowpower_mode ? "enter LPM mode" : "");
 
@@ -1683,10 +1689,15 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	struct fb_event *evdata = data;
 	struct mms_ts_info *info = container_of(self, struct mms_ts_info, fb_notif);
-	int blank;
+	int blank, ret = NOTIFY_OK;
 
 	if (event != FB_EVENT_BLANK || !evdata || !evdata->data)
 		return NOTIFY_DONE;
+
+	/* The power HAL owns input state while the device is disabled. */
+	mutex_lock(&info->input_dev->mutex);
+	if (info->input_dev->disabled)
+		goto out;
 
 	blank = *(int *)evdata->data;
 	switch (blank) {
@@ -1700,9 +1711,11 @@ static int fb_notifier_callback(struct notifier_block *self,
 		mms_input_close(info->input_dev);
 		break;
 	default:
-		return NOTIFY_DONE;
+		ret = NOTIFY_DONE;
 	}
 
-	return NOTIFY_OK;
+out:
+	mutex_unlock(&info->input_dev->mutex);
+	return ret;
 }
 #endif

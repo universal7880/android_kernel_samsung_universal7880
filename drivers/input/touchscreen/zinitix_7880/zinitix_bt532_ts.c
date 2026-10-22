@@ -2971,6 +2971,10 @@ static void bt532_ts_close(struct input_dev *dev)
 
 	if((pdata->support_lpm_mode)&&(info->spay_enable||info->aod_enable)){
 		down(&info->work_lock);
+		if (info->sleep_mode) {
+			up(&info->work_lock);
+			return;
+		}
 		prev_work_state = info->work_state;
 		info->work_state = SLEEP_MODE_IN;
 		input_info(true, &misc_info->client->dev, "%s, sleep mode\n", __func__);
@@ -8021,10 +8025,15 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	struct fb_event *evdata = data;
 	struct bt532_ts_info *info = container_of(self, struct bt532_ts_info, fb_notif);
-	int blank;
+	int blank, ret = NOTIFY_OK;
 
 	if (event != FB_EVENT_BLANK || !evdata || !evdata->data)
 		return NOTIFY_DONE;
+
+	/* The power HAL owns input state while the device is disabled. */
+	mutex_lock(&info->input_dev->mutex);
+	if (info->input_dev->disabled)
+		goto out;
 
 	blank = *(int *)evdata->data;
 	switch (blank) {
@@ -8038,9 +8047,11 @@ static int fb_notifier_callback(struct notifier_block *self,
 		bt532_ts_close(info->input_dev);
 		break;
 	default:
-		return NOTIFY_DONE;
+		ret = NOTIFY_DONE;
 	}
 
-	return NOTIFY_OK;
+out:
+	mutex_unlock(&info->input_dev->mutex);
+	return ret;
 }
 #endif
