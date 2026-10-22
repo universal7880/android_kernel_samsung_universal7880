@@ -3875,10 +3875,15 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	struct fb_event *evdata = data;
 	struct abov_tk_info *info = container_of(self, struct abov_tk_info, fb_notif);
-	int blank;
+	int blank, ret = NOTIFY_OK;
 
 	if (event != FB_EVENT_BLANK || !evdata || !evdata->data)
 		return NOTIFY_DONE;
+
+	/* Keep keys disabled by navigation gestures or the power HAL asleep. */
+	mutex_lock(&info->input_dev->mutex);
+	if (info->input_dev->disabled)
+		goto out;
 
 	blank = *(int *)evdata->data;
 	switch (blank) {
@@ -3892,9 +3897,11 @@ static int fb_notifier_callback(struct notifier_block *self,
 		abov_tk_input_close(info->input_dev);
 		break;
 	default:
-		return NOTIFY_DONE;
+		ret = NOTIFY_DONE;
 	}
 
-	return NOTIFY_OK;
+out:
+	mutex_unlock(&info->input_dev->mutex);
+	return ret;
 }
 #endif
