@@ -176,6 +176,7 @@ void lpass_update_lpclock_impl(struct device *dev, u32 ctrlid, bool active)
 		g_current_power_mode, dram_used);
 	switch (g_current_power_mode) {
 	case 0x00:
+	case 0x04: /* SRAM recording may coexist with DRAM playback. */
 		if (dram_used == 0)
 			exynos_update_ip_idle_status(g_sicd_aud_index, 1);
 		else
@@ -184,9 +185,6 @@ void lpass_update_lpclock_impl(struct device *dev, u32 ctrlid, bool active)
 	case 0x02: /* DRAM Use Case */
 	case 0x06:
 		exynos_update_ip_idle_status(g_sicd_aud_index, 0);
-		break;
-	case 0x04: /* Only SRAM record case */
-		exynos_update_ip_idle_status(g_sicd_aud_index, 1);
 		break;
 	default:
 		pr_err("[ERROR] Invalid audio power mode: 0x%04X\n",
