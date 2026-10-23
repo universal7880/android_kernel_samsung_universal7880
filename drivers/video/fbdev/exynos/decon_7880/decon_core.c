@@ -4580,8 +4580,20 @@ static int decon_remove(struct platform_device *pdev)
 static void decon_shutdown(struct platform_device *pdev)
 {
 	struct decon_device *decon = platform_get_drvdata(pdev);
+	struct fb_info *fbinfo = decon->windows[decon->pdata->default_win]->fbinfo;
+	int blank = FB_BLANK_POWERDOWN;
+	struct fb_event event = {
+		.info = fbinfo,
+		.data = &blank,
+	};
 
 	dev_info(decon->dev, "%s + state:%d\n", __func__, decon->state);
+
+	if (!lock_fb_info(fbinfo)) {
+		decon_warn("%s: failed to lock framebuffer\n", __func__);
+		return;
+	}
+
 	DISP_SS_EVENT_LOG(DISP_EVT_DECON_SHUTDOWN, &decon->sd, ktime_set(0, 0));
 
 	if (decon->pdata->psr_mode == DECON_MIPI_COMMAND_MODE)
@@ -4589,8 +4601,13 @@ static void decon_shutdown(struct platform_device *pdev)
 
 	decon_lpd_block_exit(decon);
 	/* Unused DECON state is DECON_STATE_INIT */
-	if (decon->state == DECON_STATE_ON)
+	if (decon->state == DECON_STATE_ON) {
+		decon_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
 		decon_disable(decon);
+		decon_notifier_call_chain(FB_EVENT_BLANK, &event);
+	}
+
+	unlock_fb_info(fbinfo);
 
 	dev_info(decon->dev, "%s -\n", __func__);
 }
