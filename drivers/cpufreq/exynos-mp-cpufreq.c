@@ -2156,6 +2156,24 @@ static int exynos_mp_cpufreq_parse_dt(struct device_node *np, cluster_type cl)
  ********************************************************************************/
 bool exynos_cpufreq_init_done;
 
+#ifdef CONFIG_SOC_EXYNOS7880
+struct cpufreq_frequency_table *exynos_cpufreq_get_table(unsigned int cpu)
+{
+	cluster_type cluster;
+
+	if (!exynos_cpufreq_init_done || cpu >= nr_cpu_ids || !cpu_possible(cpu))
+		return NULL;
+
+	cluster = get_cur_cluster(cpu);
+	if (cluster >= CL_END || !exynos_info[cluster])
+		return NULL;
+
+	/* Driver tables outlive policies removed when a cluster goes offline. */
+	return exynos_info[cluster]->freq_table;
+}
+EXPORT_SYMBOL_GPL(exynos_cpufreq_get_table);
+#endif
+
 static void init_cluster_cpumask(void)
 {
 	unsigned int cpu, cluster;

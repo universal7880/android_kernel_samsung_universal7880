@@ -28,6 +28,10 @@
 #include <linux/cpu.h>
 #include <linux/cpu_cooling.h>
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
+#include <soc/samsung/cpufreq.h>
+#endif
+
 #include <soc/samsung/tmu.h>
 
 #include "exynos_tmu_data.h"
@@ -134,6 +138,10 @@ static int get_property(unsigned int cpu, unsigned long input,
 	if (!output)
 		return -EINVAL;
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
+	if (!table)
+		table = exynos_cpufreq_get_table(cpu);
+#endif
 	if (!table)
 		return -EINVAL;
 
@@ -352,7 +360,11 @@ static int cpufreq_get_max_state(struct thermal_cooling_device *cdev,
 
 	ret = get_property(cpu, 0, &count, GET_MAXL);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (!ret)
+#else
 	if (count > 0)
+#endif
 		*state = count;
 
 	return ret;

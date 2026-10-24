@@ -15,6 +15,11 @@
 
 #include <linux/notifier.h>
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
+struct cpufreq_frequency_table;
+struct cpufreq_frequency_table *exynos_cpufreq_get_table(unsigned int cpu);
+#endif
+
 /*
  * Common definitions and structures
  */
