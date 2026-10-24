@@ -31,6 +31,11 @@
 #include <linux/cpufreq.h>
 #include <soc/samsung/cpufreq.h>
 
+#ifdef CONFIG_SOC_EXYNOS7880
+#include <asm/cputype.h>
+#include <asm/smp_plat.h>
+#endif
+
 #include "exynos_thermal_common.h"
 
 #if defined(CONFIG_GPU_THERMAL)
@@ -554,12 +559,20 @@ int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf)
 	th_zone->sensor_conf = sensor_conf;
 	cpumask_clear(&mask_val);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	/* Offline CPUs may not have populated cpu_topology yet. */
+	for_each_possible_cpu(cpu) {
+		if (MPIDR_AFFINITY_LEVEL(cpu_logical_map(cpu), 1) == sensor_conf->id)
+			cpumask_set_cpu(cpu, &mask_val);
+	}
+#else
 	for_each_possible_cpu(cpu) {
 		if (cpu_topology[cpu].cluster_id == sensor_conf->id) {
 			cpumask_copy(&mask_val, topology_core_cpumask(cpu));
 			break;
 		}
 	}
+#endif
 
 	/*
 	 * TODO: 1) Handle multiple cooling devices in a thermal zone
