@@ -57,7 +57,7 @@ obj-$(CONFIG_MWIFIEX)	+= mwifiex/
 
 # Android Version Check from Platform source
 ifneq ($(ANDROID_VERSION),)
-MAJOR_VERSION := $(shell echo $(ANDROID_VERSION) | rev | cut -c 5- | rev)
+MAJOR_VERSION := $(shell echo $$(($(ANDROID_VERSION) / 10000)))
 DHDCFLAGS += -DANDROID_PLATFORM_VERSION=$(MAJOR_VERSION)
 $(warning android version 1: $(ANDROID_VERSION))
 $(warning MAJOR_VERSION version 1: $(MAJOR_VERSION))
