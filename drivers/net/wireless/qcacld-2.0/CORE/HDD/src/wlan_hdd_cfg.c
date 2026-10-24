@@ -4386,7 +4386,8 @@ typedef struct
 }tCfgIniEntry;
 
 #ifdef SEC_CONFIG_GRIP_POWER
-#define SEC_GRIPPOWER_FILEPATH	"/etc/firmware/wlan/grippower.info"
+#define SEC_GRIPPOWER_FILEPATH	"/vendor/firmware/wlan/grippower.info"
+#define SEC_GRIPPOWER_LEGACY_FILEPATH	"/etc/firmware/wlan/grippower.info"
 bool wlan_hdd_sec_get_grip_power(unsigned int *grip_power_2g, unsigned int *grip_power_5g)
 {
     struct file *fp    = NULL;
@@ -4396,6 +4397,8 @@ bool wlan_hdd_sec_get_grip_power(unsigned int *grip_power_2g, unsigned int *grip
     bool status      = FALSE;
     for (i = 0; i < 5; ++i) {
         fp = filp_open(filepath, O_RDONLY, 0);
+        if (IS_ERR(fp))
+            fp = filp_open(SEC_GRIPPOWER_LEGACY_FILEPATH, O_RDONLY, 0);
         if (!IS_ERR(fp)) {
             kernel_read(fp, 0, buf, 5);
             sscanf(buf, "%d:%d", (unsigned int *)grip_power_2g, (unsigned int *)grip_power_5g);

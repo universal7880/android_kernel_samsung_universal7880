@@ -276,6 +276,8 @@ static const char * const fw_path[] = {
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
 #ifdef CONFIG_QCOM_WIFI
+	"/vendor/firmware",
+	"/vendor/firmware/wlan",
 	"/etc/firmware",
 	"/etc/firmware/wlan",
 #endif /* CONFIG_QCOM_WIFI */
