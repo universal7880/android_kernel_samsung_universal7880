@@ -318,13 +318,21 @@ static int cpufreq_thermal_notifier(struct notifier_block *nb,
 	unsigned long max_freq = 0;
 	struct cpufreq_cooling_device *cpufreq_dev;
 
-	if (event != CPUFREQ_ADJUST)
+	if (event != CPUFREQ_ADJUST && event != CPUFREQ_START)
 		return 0;
 
 	mutex_lock(&cooling_cpufreq_lock);
 	list_for_each_entry(cpufreq_dev, &cpufreq_dev_list, node) {
 		if (!cpumask_test_cpu(policy->cpu,
 					&cpufreq_dev->allowed_cpus))
+			continue;
+
+		/* Capture the table before hotplug can remove the policy. */
+		if (!cpufreq_dev->max_state_valid &&
+		    !get_property(policy->cpu, 0, &cpufreq_dev->max_state, GET_MAXL))
+			cpufreq_dev->max_state_valid = true;
+
+		if (event != CPUFREQ_ADJUST)
 			continue;
 
 		if (!cpufreq_dev->cpufreq_val)
@@ -472,6 +480,14 @@ __cpufreq_cooling_register(struct device_node *np,
 		return ERR_PTR(-ENOMEM);
 
 	cpumask_copy(&cpufreq_dev->allowed_cpus, clip_cpus);
+
+	/* The first sysfs read may happen after the cluster has gone offline. */
+	for_each_cpu(i, clip_cpus) {
+		if (!get_property(i, 0, &cpufreq_dev->max_state, GET_MAXL)) {
+			cpufreq_dev->max_state_valid = true;
+			break;
+		}
+	}
 
 	ret = get_idr(&cpufreq_idr, &cpufreq_dev->id);
 	if (ret) {
