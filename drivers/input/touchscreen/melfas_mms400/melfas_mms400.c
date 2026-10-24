@@ -7,6 +7,10 @@
 
 #include "melfas_mms400.h"
 
+#if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
+#include "../../../video/fbdev/exynos/decon_7880/decon_notify.h"
+#endif
+
 #if MMS_USE_NAP_MODE
 struct wake_lock mms_wake_lock;
 #endif
@@ -1478,7 +1482,7 @@ static int mms_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		"MELFAS " CHIP_NAME " Touchscreen is initialized successfully\n");
 #if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
 	info->fb_notif.notifier_call = fb_notifier_callback;
-	if (fb_register_client(&info->fb_notif))
+	if (decon_register_notifier(&info->fb_notif))
 		dev_err(&client->dev, "Failed to register display notifier\n");
 	else
 		info->fb_notif_registered = true;
@@ -1546,7 +1550,7 @@ static int mms_remove(struct i2c_client *client)
 
 #if defined(CONFIG_SOC_EXYNOS7880) && defined(CONFIG_FB)
 	if (info->fb_notif_registered)
-		fb_unregister_client(&info->fb_notif);
+		decon_unregister_notifier(&info->fb_notif);
 #endif
 
 
@@ -1691,7 +1695,8 @@ static int fb_notifier_callback(struct notifier_block *self,
 	struct mms_ts_info *info = container_of(self, struct mms_ts_info, fb_notif);
 	int blank, ret = NOTIFY_OK;
 
-	if (event != FB_EVENT_BLANK || !evdata || !evdata->data)
+	if ((event != FB_EVENT_BLANK && event != DECON_EVENT_DOZE) ||
+	    !evdata || !evdata->data)
 		return NOTIFY_DONE;
 
 	/* The power HAL owns input state while the device is disabled. */
