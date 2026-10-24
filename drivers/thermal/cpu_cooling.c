@@ -38,6 +38,8 @@
  *	cooling	devices.
  * @cpufreq_val: integer value representing the absolute value of the clipped
  *	frequency.
+ * @max_state: cached maximum cooling state, independent of CPU online state.
+ * @max_state_valid: whether max_state has been read from the frequency table.
  * @allowed_cpus: all the cpus involved for this cpufreq_cooling_device.
  *
  * This structure is required for keeping information of each
@@ -49,6 +51,8 @@ struct cpufreq_cooling_device {
 	struct thermal_cooling_device *cool_dev;
 	unsigned int cpufreq_state;
 	unsigned int cpufreq_val;
+	unsigned int max_state;
+	bool max_state_valid;
 	struct cpumask allowed_cpus;
 	struct list_head node;
 };
@@ -354,17 +358,22 @@ static int cpufreq_get_max_state(struct thermal_cooling_device *cdev,
 				 unsigned long *state)
 {
 	struct cpufreq_cooling_device *cpufreq_device = cdev->devdata;
-	struct cpumask *mask = &cpufreq_device->allowed_cpus;
-	unsigned int cpu;
-	unsigned int count = 0;
-	int ret;
+	unsigned int cpu = cpumask_any(&cpufreq_device->allowed_cpus);
+	unsigned int count;
+	int ret = 0;
 
-	cpu = cpumask_any(mask);
-
-	ret = get_property(cpu, 0, &count, GET_MAXL);
-
-	if (count > 0)
-		*state = count;
+	/* Hotplug can remove the policy, but does not change the cooling table. */
+	mutex_lock(&cooling_cpufreq_lock);
+	if (!cpufreq_device->max_state_valid) {
+		ret = get_property(cpu, 0, &count, GET_MAXL);
+		if (!ret) {
+			cpufreq_device->max_state = count;
+			cpufreq_device->max_state_valid = true;
+		}
+	}
+	if (!ret)
+		*state = cpufreq_device->max_state;
+	mutex_unlock(&cooling_cpufreq_lock);
 
 	return ret;
 }
