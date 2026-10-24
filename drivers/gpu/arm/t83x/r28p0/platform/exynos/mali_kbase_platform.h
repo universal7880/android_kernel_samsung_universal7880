@@ -83,6 +83,9 @@ typedef enum {
 #endif /* CONFIG_CPU_THERMAL_IPA */
 	BOOST_LOCK,
 	PMQOS_LOCK,
+#ifdef CONFIG_SOC_EXYNOS7880
+	THERMAL_HAL_LOCK,
+#endif
 	NUMBER_LOCK
 } gpu_dvfs_lock_type;
 

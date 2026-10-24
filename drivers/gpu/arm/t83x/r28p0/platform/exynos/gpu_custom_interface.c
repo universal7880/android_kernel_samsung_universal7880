@@ -521,6 +521,49 @@ static ssize_t show_min_lock_status(struct device *dev, struct device_attribute 
 	return ret;
 }
 
+#ifdef CONFIG_SOC_EXYNOS7880
+/* A dedicated request keeps the AP policy independent of TMU and SYSFS locks. */
+static ssize_t show_thermal_max_lock(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct exynos_context *platform = pkbdev->platform_context;
+	unsigned long flags;
+	int clock;
+
+	if (!platform)
+		return -ENODEV;
+	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
+	clock = platform->user_max_lock[THERMAL_HAL_LOCK];
+	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", clock);
+}
+
+static ssize_t set_thermal_max_lock(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct exynos_context *platform = pkbdev->platform_context;
+	int clock, level, ret;
+
+	if (!platform)
+		return -ENODEV;
+	if (kstrtoint(buf, 10, &clock) || clock < 0)
+		return -EINVAL;
+	if (!platform->dvfs_status)
+		return -EAGAIN;
+	if (clock) {
+		level = gpu_dvfs_get_level(clock);
+		if (level < gpu_dvfs_get_level(platform->gpu_max_clock) ||
+		    level > gpu_dvfs_get_level(platform->gpu_min_clock))
+			return -EINVAL;
+	}
+	ret = gpu_dvfs_clock_lock(clock ? GPU_DVFS_MAX_LOCK : GPU_DVFS_MAX_UNLOCK,
+			THERMAL_HAL_LOCK, clock);
+	if (ret)
+		return -EINVAL;
+	return count;
+}
+#endif
+
 static ssize_t show_max_lock_dvfs(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
@@ -1528,6 +1571,9 @@ DEVICE_ATTR(dvfs, S_IRUGO|S_IWUSR, show_dvfs, set_dvfs);
 DEVICE_ATTR(dvfs_governor, S_IRUGO|S_IWUSR, show_governor, set_governor);
 DEVICE_ATTR(dvfs_max_lock_status, S_IRUGO, show_max_lock_status, NULL);
 DEVICE_ATTR(dvfs_min_lock_status, S_IRUGO, show_min_lock_status, NULL);
+#ifdef CONFIG_SOC_EXYNOS7880
+DEVICE_ATTR(thermal_max_lock, S_IRUGO|S_IWUSR, show_thermal_max_lock, set_thermal_max_lock);
+#endif
 DEVICE_ATTR(dvfs_max_lock, S_IRUGO|S_IWUSR, show_max_lock_dvfs, set_max_lock_dvfs);
 DEVICE_ATTR(dvfs_min_lock, S_IRUGO|S_IWUSR, show_min_lock_dvfs, set_min_lock_dvfs);
 DEVICE_ATTR(down_staycount, S_IRUGO|S_IWUSR, show_down_staycount, set_down_staycount);
@@ -2094,6 +2140,13 @@ int gpu_create_sysfs_file(struct device *dev)
 		goto out;
 	}
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (device_create_file(dev, &dev_attr_thermal_max_lock)) {
+		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "couldn't create thermal_max_lock\n");
+		goto out;
+	}
+#endif
+
 	if (device_create_file(dev, &dev_attr_dvfs_max_lock)) {
 		GPU_LOG(DVFS_ERROR, DUMMY, 0u, 0u, "couldn't create sysfs file [dvfs_max_lock]\n");
 		goto out;
@@ -2239,6 +2292,9 @@ void gpu_remove_sysfs_file(struct device *dev)
 	device_remove_file(dev, &dev_attr_dvfs_governor);
 	device_remove_file(dev, &dev_attr_dvfs_max_lock_status);
 	device_remove_file(dev, &dev_attr_dvfs_min_lock_status);
+#ifdef CONFIG_SOC_EXYNOS7880
+	device_remove_file(dev, &dev_attr_thermal_max_lock);
+#endif
 	device_remove_file(dev, &dev_attr_dvfs_max_lock);
 	device_remove_file(dev, &dev_attr_dvfs_min_lock);
 	device_remove_file(dev, &dev_attr_down_staycount);
