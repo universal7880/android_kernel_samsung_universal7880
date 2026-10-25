@@ -364,6 +364,9 @@ struct sec_battery_info {
 	bool is_hc_usb;
 
 	int siop_level;
+#ifdef CONFIG_SOC_EXYNOS7880
+	int thermal_siop_level;
+#endif
 	int siop_event;
 	int siop_prev_event;
 	int stability_test;
@@ -604,6 +607,9 @@ enum {
 	FACTORY_VOLTAGE_REGULATION,
 	FACTORY_MODE_DISABLE,
 	BATT_PRESENT,
+#ifdef CONFIG_SOC_EXYNOS7880
+	THERMAL_SIOP_LEVEL,
+#endif
 };
 
 enum {
