@@ -177,6 +177,9 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(factory_voltage_regulation),
 	SEC_BATTERY_ATTR(factory_mode_disable),
 	SEC_BATTERY_ATTR(batt_present),
+#ifdef CONFIG_SOC_EXYNOS7880
+	SEC_BATTERY_ATTR(thermal_siop_level),
+#endif
 };
 
 static enum power_supply_property sec_battery_props[] = {
@@ -384,9 +387,9 @@ static int sec_bat_get_wireless_current(struct sec_battery_info *battery, int in
 }
 
 static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *battery,
-		int *input_current, int *charging_current) {
+		int *input_current, int *charging_current, int siop_level) {
 	int usb_charging_current = battery->pdata->charging_current[POWER_SUPPLY_TYPE_USB].fast_charging_current;
-	if (battery->siop_level == 3) {
+	if (siop_level == 3) {
 		/* side sync scenario : siop_level 3 */
 		if (is_nv_wireless_type(battery->cable_type)) {
 			if (*input_current > battery->pdata->siop_wireless_input_limit_current)
@@ -414,7 +417,7 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 			if (*charging_current > battery->pdata->siop_charging_limit_current)
 				*charging_current = battery->pdata->siop_charging_limit_current;
 		}
-	} else if (battery->siop_level == 5) {
+	} else if (siop_level == 5) {
 		/* special senario : calling or browsing during wired charging */
 		if (is_hv_wire_type(battery->cable_type)) {
 			if (battery->cable_type == POWER_SUPPLY_TYPE_HV_MAINS_12V)
@@ -427,17 +430,17 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 			*input_current = 1000;
 			*charging_current = 900;
 		}
-	} else if (battery->siop_level < 100) {
+	} else if (siop_level < 100) {
 #ifdef CONFIG_SOC_EXYNOS7880
 		/* decrease the charging current according to siop level */
-		*charging_current = *charging_current * battery->siop_level / 100;
+		*charging_current = *charging_current * siop_level / 100;
 
 		/* do forced set charging current */
 		if (*charging_current > 0 && *charging_current < usb_charging_current)
 			*charging_current = usb_charging_current;
 
 		/* if siop level is 0, set minimum charging current from dt */
-		if (battery->siop_level == 0 &&
+		if (siop_level == 0 &&
 			battery->pdata->minimum_charging_current_by_siop_0 > 0){
 			pr_info("%s: set minimum charging current(%d) when siop level is 0\n", __func__, battery->pdata->minimum_charging_current_by_siop_0);
 			*charging_current = battery->pdata->minimum_charging_current_by_siop_0;
@@ -448,14 +451,14 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 
 		if (is_wireless_type(battery->cable_type)) {
 			/* decrease the charging current according to siop level */
-			*charging_current = *charging_current * battery->siop_level / 100;
+			*charging_current = *charging_current * siop_level / 100;
 
 			/* do forced set charging current */
 			if (*charging_current > 0 && *charging_current < usb_charging_current)
 				*charging_current = usb_charging_current;
 
 			/* if siop level is 0, set minimum charging current from dt */
-			if (battery->siop_level == 0 &&
+			if (siop_level == 0 &&
 				battery->pdata->minimum_charging_current_by_siop_0 > 0){
 				pr_info("%s: set minimum charging current(%d) when siop level is 0\n", __func__, battery->pdata->minimum_charging_current_by_siop_0);
 				*charging_current = battery->pdata->minimum_charging_current_by_siop_0;
@@ -515,6 +518,27 @@ static void sec_bat_get_charging_current_by_siop(struct sec_battery_info *batter
 		}
 	}
 }
+
+
+#ifdef CONFIG_SOC_EXYNOS7880
+/* Calculate a separate ceiling without changing SIOP or its safety-check gates. */
+static void sec_bat_apply_thermal_current_limit(struct sec_battery_info *battery,
+		int *input_current, int *charging_current)
+{
+	int input, charging;
+
+	if (battery->thermal_siop_level == 100 ||
+		battery->cable_type == POWER_SUPPLY_TYPE_BATTERY)
+		return;
+
+	input = battery->pdata->charging_current[battery->cable_type].input_current_limit;
+	charging = battery->pdata->charging_current[battery->cable_type].fast_charging_current;
+	sec_bat_get_charging_current_by_siop(battery, &input, &charging,
+		battery->thermal_siop_level);
+	*input_current = min(*input_current, input);
+	*charging_current = min(*charging_current, charging);
+}
+#endif
 
 
 #if !defined(CONFIG_SEC_FACTORY)
@@ -905,7 +929,8 @@ static int sec_bat_set_charging_current(struct sec_battery_info *battery)
 			input_current = battery->pdata->store_mode_afc_input_current;
 		}
 
-		sec_bat_get_charging_current_by_siop(battery, &input_current, &charging_current);
+		sec_bat_get_charging_current_by_siop(battery, &input_current, &charging_current,
+			battery->siop_level);
 
 		/* Calculate wireless input current under the specific conditions (siop_event, wpc_sleep_mode, chg_limit)*/
 		if (battery->wc_status != SEC_WIRELESS_PAD_NONE) {
@@ -955,6 +980,10 @@ static int sec_bat_set_charging_current(struct sec_battery_info *battery)
 #endif
 		
 	}
+
+#ifdef CONFIG_SOC_EXYNOS7880
+	sec_bat_apply_thermal_current_limit(battery, &input_current, &charging_current);
+#endif
 
 	/* In wireless charging, must be set charging current before input current. */
 	if (is_wireless_type(battery->cable_type) &&
@@ -5353,6 +5382,13 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 				       battery->present);
 		}
 		break;
+#ifdef CONFIG_SOC_EXYNOS7880
+	case THERMAL_SIOP_LEVEL:
+		mutex_lock(&battery->iolock);
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->thermal_siop_level);
+		mutex_unlock(&battery->iolock);
+		break;
+#endif
 	default:
 		i = -EINVAL;
 		break;
@@ -5490,6 +5526,18 @@ ssize_t sec_bat_store_attrs(
 		break;
 	case SIOP_ACTIVATED:
 		break;
+#ifdef CONFIG_SOC_EXYNOS7880
+	case THERMAL_SIOP_LEVEL:
+		/* 100 releases this request. Do not expose SIOP's special 0/3/5 modes. */
+		if (kstrtoint(buf, 10, &x) || x < 10 || x > 100)
+			return -EINVAL;
+		mutex_lock(&battery->iolock);
+		battery->thermal_siop_level = x;
+		mutex_unlock(&battery->iolock);
+		sec_bat_set_charging_current(battery);
+		ret = count;
+		break;
+#endif
 	case SIOP_LEVEL:
 		if (sscanf(buf, "%10d\n", &x) == 1) {
 			dev_info(battery->dev,
@@ -9638,6 +9686,9 @@ static int sec_battery_probe(struct platform_device *pdev)
 	battery->charging_next_time = 0;
 	battery->charging_fullcharged_time = 0;
 	battery->siop_level = 100;
+#ifdef CONFIG_SOC_EXYNOS7880
+	battery->thermal_siop_level = 100;
+#endif
 	battery->siop_event = 0;
 	battery->wc_enable = 1;
 	battery->wc_enable_cnt = 0;

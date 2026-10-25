@@ -1,0 +1,15 @@
+What:           /sys/class/power_supply/battery/thermal_siop_level
+Date:           October 2026
+Description:
+                Independent Exynos7880 AP thermal charging request. Accepts
+                integer percentages from 10 to 100; 100 releases the request
+                and is the initial value at boot.
+
+                Uses the board's nominal currents and Samsung SIOP conversion,
+                including its USB charging floor. The result is combined by
+                minimum with the existing input and charging current limits.
+                This does not change siop_level, charging enablement, battery
+                temperature protection, or USB configuration restrictions.
+
+                The request persists until another write or reboot. Userspace
+                must update it after restart and write 100 when releasing it.
