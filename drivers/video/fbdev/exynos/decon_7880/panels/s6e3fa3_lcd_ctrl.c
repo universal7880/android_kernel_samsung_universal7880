@@ -96,6 +96,7 @@ struct lcd_info {
 	unsigned int			connected;
 	unsigned int			bl;
 	unsigned int			brightness;
+	unsigned int			thermal_max_brightness;
 	unsigned int			current_bl;
 	union elvss_info		current_elvss;
 	union aor_info			current_aor;
@@ -386,6 +387,8 @@ static int dsim_panel_set_brightness(struct lcd_info *lcd, int force)
 #endif
 
 	lcd->brightness = lcd->bd->props.brightness;
+	if (lcd->thermal_max_brightness)
+		lcd->brightness = min(lcd->brightness, lcd->thermal_max_brightness);
 
 	lcd->bl = get_backlight_level_from_brightness(lcd->brightness);
 
@@ -1487,6 +1490,39 @@ static ssize_t aid_log_show(struct device *dev,
 	return strlen(buf);
 }
 
+static ssize_t thermal_max_brightness_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct lcd_info *lcd = dev_get_drvdata(dev);
+	unsigned int limit;
+
+	mutex_lock(&lcd->lock);
+	limit = lcd->thermal_max_brightness;
+	mutex_unlock(&lcd->lock);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", limit);
+}
+
+static ssize_t thermal_max_brightness_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct lcd_info *lcd = dev_get_drvdata(dev);
+	unsigned int limit;
+	int ret;
+
+	if (kstrtouint(buf, 10, &limit) || limit > EXTEND_BRIGHTNESS)
+		return -EINVAL;
+
+	mutex_lock(&lcd->lock);
+	lcd->thermal_max_brightness = limit;
+	mutex_unlock(&lcd->lock);
+
+	/* Keep the requested brightness. Doze uses its separate ALPM commands. */
+	ret = dsim_panel_set_brightness(lcd, 0);
+	if (ret < 0)
+		return ret;
+	return size;
+}
+
 static ssize_t adaptive_control_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -1776,6 +1812,8 @@ static DEVICE_ATTR(color_coordinate, 0444, color_coordinate_show, NULL);
 static DEVICE_ATTR(manufacture_date, 0444, manufacture_date_show, NULL);
 static DEVICE_ATTR(aid_log, 0444, aid_log_show, NULL);
 static DEVICE_ATTR(adaptive_control, 0664, adaptive_control_show, adaptive_control_store);
+static DEVICE_ATTR(thermal_max_brightness, 0644, thermal_max_brightness_show,
+		thermal_max_brightness_store);
 static DEVICE_ATTR(lux, 0644, lux_show, lux_store);
 static DEVICE_ATTR(octa_id, 0444, octa_id_show, NULL);
 static DEVICE_ATTR(SVC_OCTA, 0444, cell_id_show, NULL);
@@ -1792,6 +1830,7 @@ static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_aid_log.attr,
 	&dev_attr_brightness_table.attr,
 	&dev_attr_adaptive_control.attr,
+	&dev_attr_thermal_max_brightness.attr,
 	&dev_attr_lux.attr,
 	&dev_attr_octa_id.attr,
 #ifdef CONFIG_LCD_DOZE_MODE

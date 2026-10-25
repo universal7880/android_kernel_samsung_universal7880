@@ -1,0 +1,16 @@
+What:           /sys/class/lcd/panel/thermal_max_brightness
+Date:           October 2026
+Description:
+                Independent maximum brightness request for A5/A7 Exynos7880
+                panels. Decimal 0 releases the request and is the boot default;
+                positive values are backlight indices up to EXTEND_BRIGHTNESS,
+                interpreted through the selected panel's existing tables.
+
+                Caps the applied brightness without modifying the requested
+                backlight brightness. A lower request stays lower; releasing
+                the cap reapplies the latest requested value. ALPM/AOD uses
+                separate commands and is unaffected. A request made while the
+                panel is off or in doze takes effect on normal display resume.
+
+                The request persists until another write or reboot. Userspace
+                must update it after restart and write 0 when releasing it.
