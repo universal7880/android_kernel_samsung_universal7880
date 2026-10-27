@@ -211,14 +211,14 @@ int posix_clock_register(struct posix_clock *clk, struct device *dev)
 	init_rwsem(&clk->rwsem);
 
 	cdev_init(&clk->cdev, &posix_clock_file_operations);
+	clk->cdev.owner = clk->ops.owner;
+	clk->dev = dev;
 	err = cdev_device_add(&clk->cdev, dev);
 	if (err) {
 		pr_err("%s unable to add device %d:%d\n",
 			dev_name(dev), MAJOR(dev->devt), MINOR(dev->devt));
 		return err;
 	}
-	clk->cdev.owner = clk->ops.owner;
-	clk->dev = dev;
 
 	return 0;
 }
