@@ -597,12 +597,11 @@ void init_dl_task_timer(struct sched_dl_entity *dl_se)
  */
 static inline void dl_check_constrained_dl(struct sched_dl_entity *dl_se)
 {
-	struct task_struct *p = dl_task_of(dl_se);
 	struct rq *rq = rq_of_dl_rq(dl_rq_of_se(dl_se));
 
 	if (dl_time_before(dl_se->deadline, rq_clock(rq)) &&
 	    dl_time_before(rq_clock(rq), dl_next_period(dl_se))) {
-		if (unlikely(dl_se->dl_boosted || !start_dl_timer(p)))
+		if (unlikely(dl_se->dl_boosted || !start_dl_timer(dl_se, dl_se->dl_boosted)))
 			return;
 		dl_se->dl_throttled = 1;
 	}
