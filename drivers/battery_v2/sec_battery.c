@@ -194,6 +194,9 @@ static enum power_supply_property sec_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+#ifdef CONFIG_SOC_EXYNOS7880
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+#endif
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
@@ -215,12 +218,26 @@ static enum power_supply_property sec_wireless_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 };
 
+#if !defined(CONFIG_SOC_EXYNOS7880) || defined(CONFIG_USE_POGO)
 static enum power_supply_property sec_power_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
+#endif
+
+#ifdef CONFIG_SOC_EXYNOS7880
+static enum power_supply_property sec_usb_props[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+};
+#endif
 
 static enum power_supply_property sec_ac_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
+#ifdef CONFIG_SOC_EXYNOS7880
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+#endif
 	POWER_SUPPLY_PROP_TEMP,
 };
 
@@ -6959,6 +6976,11 @@ static int sec_bat_get_property(struct power_supply *psy,
 		val->intval = value.intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
+#ifdef CONFIG_SOC_EXYNOS7880
+		/* The fuel gauge does not provide a learned full-charge capacity. */
+		return -ENODATA;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+#endif
 		val->intval = battery->pdata->battery_full_capacity * 1000;
 		break;	
 	/* charging mode (differ from power supply) */
@@ -7039,6 +7061,17 @@ static int sec_usb_get_property(struct power_supply *psy,
 	struct sec_battery_info *battery =
 		container_of(psy, struct sec_battery_info, psy_usb);
 
+#ifdef CONFIG_SOC_EXYNOS7880
+	if (psp == POWER_SUPPLY_PROP_CURRENT_MAX) {
+		val->intval = battery->current_max * 1000;
+		return 0;
+	}
+	if (psp == POWER_SUPPLY_PROP_VOLTAGE_MAX) {
+		val->intval = battery->input_voltage * 1000000;
+		return 0;
+	}
+#endif
+
 	if (psp != POWER_SUPPLY_PROP_ONLINE)
 		return -EINVAL;
 
@@ -7079,6 +7112,14 @@ static int sec_ac_get_property(struct power_supply *psy,
 	enum power_supply_ext_property ext_psp = psp;
 
 	switch (psp) {
+#ifdef CONFIG_SOC_EXYNOS7880
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = battery->current_max * 1000;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = battery->input_voltage * 1000000;
+		break;
+#endif
 	case POWER_SUPPLY_PROP_ONLINE:
 		if ((battery->health == POWER_SUPPLY_HEALTH_OVERVOLTAGE) ||
 				(battery->health == POWER_SUPPLY_HEALTH_UNDERVOLTAGE)) {
@@ -9785,8 +9826,13 @@ static int sec_battery_probe(struct platform_device *pdev)
 	battery->psy_usb.type = POWER_SUPPLY_TYPE_USB,
 	battery->psy_usb.supplied_to = supply_list,
 	battery->psy_usb.num_supplicants = ARRAY_SIZE(supply_list),
+#ifdef CONFIG_SOC_EXYNOS7880
+	battery->psy_usb.properties = sec_usb_props,
+	battery->psy_usb.num_properties = ARRAY_SIZE(sec_usb_props),
+#else
 	battery->psy_usb.properties = sec_power_props,
 	battery->psy_usb.num_properties = ARRAY_SIZE(sec_power_props),
+#endif
 	battery->psy_usb.get_property = sec_usb_get_property,
 	battery->psy_ac.name = "ac",
 	battery->psy_ac.type = POWER_SUPPLY_TYPE_MAINS,
