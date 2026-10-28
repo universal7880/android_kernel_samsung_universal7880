@@ -1090,6 +1090,20 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 {
 	int i;
 	seq_printf(m, "Node %d, zone %8s", pgdat->node_id, zone->name);
+	/* Emit node totals only before its first populated zone. */
+	for (i = 0; i < MAX_NR_ZONES; i++) {
+		struct zone *first = &pgdat->node_zones[i];
+
+		if (!populated_zone(first))
+			continue;
+		if (zone == first)
+			seq_printf(m, "\n  per-node stats"
+				   "\n      nr_inactive_file %lu"
+				   "\n      nr_active_file %lu",
+				   node_page_state(pgdat->node_id, NR_INACTIVE_FILE),
+				   node_page_state(pgdat->node_id, NR_ACTIVE_FILE));
+		break;
+	}
 	seq_printf(m,
 		   "\n  pages free     %lu"
 		   "\n        min      %lu"
@@ -1108,9 +1122,15 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 		   zone->present_pages,
 		   zone->managed_pages);
 
-	for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++)
-		seq_printf(m, "\n    %-12s %lu", vmstat_text[i],
-				zone_page_state(zone, i));
+	for (i = 0; i < NR_VM_ZONE_STAT_ITEMS; i++) {
+		const char *name = vmstat_text[i];
+
+		if (i == NR_INACTIVE_FILE)
+			name = "nr_zone_inactive_file";
+		else if (i == NR_ACTIVE_FILE)
+			name = "nr_zone_active_file";
+		seq_printf(m, "\n    %-12s %lu", name, zone_page_state(zone, i));
+	}
 
 	seq_printf(m,
 		   "\n        protection: (%ld",
