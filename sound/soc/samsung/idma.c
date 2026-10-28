@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
+#include <linux/io.h>
 #include <linux/module.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -328,7 +329,17 @@ static int idma_close(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+static void idma_clear_buffer(struct snd_pcm_substream *substream)
+{
+	struct snd_pcm_runtime *runtime = substream->runtime;
+
+	/* The selected buffer can be ioremap-backed SRAM. */
+	memset_io((void __iomem __force *)runtime->dma_area, 0,
+		  runtime->dma_bytes);
+}
+
 static struct snd_pcm_ops idma_ops = {
+	.clear_buffer	= idma_clear_buffer;
 	.open		= idma_open,
 	.close		= idma_close,
 	.ioctl		= snd_pcm_lib_ioctl,

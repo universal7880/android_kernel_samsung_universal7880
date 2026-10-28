@@ -15,6 +15,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/io.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -512,7 +513,17 @@ static int dma_mmap(struct snd_pcm_substream *substream,
 				     runtime->dma_bytes);
 }
 
+static void dma_clear_buffer(struct snd_pcm_substream *substream)
+{
+	struct snd_pcm_runtime *runtime = substream->runtime;
+
+	/* The selected buffer can be ioremap-backed SRAM. */
+	memset_io((void __iomem __force *)runtime->dma_area, 0,
+		  runtime->dma_bytes);
+}
+
 static struct snd_pcm_ops pcm_dma_ops = {
+	.clear_buffer	= dma_clear_buffer;
 	.open		= dma_open,
 	.close		= dma_close,
 	.ioctl		= snd_pcm_lib_ioctl,

@@ -82,6 +82,8 @@ struct snd_pcm_ops {
 			     unsigned long offset);
 	int (*mmap)(struct snd_pcm_substream *substream, struct vm_area_struct *vma);
 	int (*ack)(struct snd_pcm_substream *substream);
+	/* Optional clearing for buffers requiring special memory accesses. */
+	void (*clear_buffer)(struct snd_pcm_substream *substream);
 };
 
 /*
