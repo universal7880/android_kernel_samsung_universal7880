@@ -523,7 +523,7 @@ static void dma_clear_buffer(struct snd_pcm_substream *substream)
 }
 
 static struct snd_pcm_ops pcm_dma_ops = {
-	.clear_buffer	= dma_clear_buffer;
+	.clear_buffer	= dma_clear_buffer,
 	.open		= dma_open,
 	.close		= dma_close,
 	.ioctl		= snd_pcm_lib_ioctl,

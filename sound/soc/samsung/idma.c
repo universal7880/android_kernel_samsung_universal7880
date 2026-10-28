@@ -339,7 +339,7 @@ static void idma_clear_buffer(struct snd_pcm_substream *substream)
 }
 
 static struct snd_pcm_ops idma_ops = {
-	.clear_buffer	= idma_clear_buffer;
+	.clear_buffer	= idma_clear_buffer,
 	.open		= idma_open,
 	.close		= idma_close,
 	.ioctl		= snd_pcm_lib_ioctl,
