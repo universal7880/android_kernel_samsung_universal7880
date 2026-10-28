@@ -590,7 +590,9 @@ static int exynos7880_devfreq_mif_set_cp_voltage(struct device *dev,
 	cp_voltage =  regulator_get_voltage(vdd_buck2_out2);
 	ap_voltage =  regulator_get_voltage(data->vdd);
 	if (ap_voltage < cp_voltage) {
-		ret = regulator_set_voltage(data->vdd, cp_voltage, cp_voltage);
+		/* Keep the CP voltage as a floor on the shared BUCK2 rail. */
+		ret = regulator_set_voltage(data->vdd, cp_voltage,
+					data->reg_max_volt);
 		if (ret) {
 			dev_err(dev, "failed to set CP voltage to %d\n",
 				cp_voltage);
