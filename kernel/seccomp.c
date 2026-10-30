@@ -350,7 +350,7 @@ static struct seccomp_filter *seccomp_prepare_filter(struct sock_fprog *fprog)
 	unsigned long fp_size;
 	struct sock_filter *fp;
 	int new_len;
-	long ret;
+	int ret;
 
 	if (fprog->len == 0 || fprog->len > BPF_MAXINSNS)
 		return ERR_PTR(-EINVAL);
@@ -411,7 +411,12 @@ static struct seccomp_filter *seccomp_prepare_filter(struct sock_fprog *fprog)
 	atomic_set(&filter->usage, 1);
 	filter->prog->len = new_len;
 
-	bpf_prog_select_runtime(filter->prog);
+	filter->prog = bpf_prog_select_runtime(filter->prog, &ret);
+	if (ret) {
+		bpf_prog_free(filter->prog);
+		kfree(filter);
+		return ERR_PTR(ret);
+	}
 
 	return filter;
 
