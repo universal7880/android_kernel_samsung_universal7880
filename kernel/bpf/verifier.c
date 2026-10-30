@@ -997,7 +997,7 @@ static int check_raw_mode(const struct bpf_func_proto *fn)
 	return count > 1 ? -EINVAL : 0;
 }
 
-static int check_call(struct verifier_env *env, int func_id)
+static int check_call(struct verifier_env *env, int insn_idx, int func_id)
 {
 	struct verifier_state *state = &env->cur_state;
 	const struct bpf_func_proto *fn = NULL;
@@ -1058,7 +1058,7 @@ static int check_call(struct verifier_env *env, int func_id)
 	 * is inferred from register state.
 	 */
 	for (i = 0; i < meta.access_size; i++) {
-		err = check_mem_access(env, meta.regno, i, BPF_B, BPF_WRITE, -1);
+		err = check_mem_access(env, insn_idx, meta.regno, i, BPF_B, BPF_WRITE, -1);
 		if (err)
 			return err;
 	}
@@ -1988,7 +1988,7 @@ static int do_check(struct verifier_env *env)
 					return -EINVAL;
 				}
 
-				err = check_call(env, insn->imm);
+				err = check_call(env, insn_idx, insn->imm);
 				if (err)
 					return err;
 
