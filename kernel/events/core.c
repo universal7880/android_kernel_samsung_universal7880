@@ -3271,7 +3271,7 @@ u64 perf_event_read_local(struct perf_event *event)
 
 	/* If this is a per-task event, it must be for current */
 	WARN_ON_ONCE((event->attach_state & PERF_ATTACH_TASK) &&
-		     event->hw.target != current);
+		     event->ctx->task != current);
 
 	/* If this is a per-CPU event, it must be for this CPU */
 	WARN_ON_ONCE(!(event->attach_state & PERF_ATTACH_TASK) &&
