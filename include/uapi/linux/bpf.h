@@ -302,6 +302,8 @@ enum bpf_func_id {
 	 * Return: csum result
 	 */
 	BPF_FUNC_csum_diff,
+	BPF_FUNC_skb_get_tunnel_opt,
+	BPF_FUNC_skb_set_tunnel_opt,
 	__BPF_FUNC_MAX_ID,
 };
 
