@@ -1396,7 +1396,7 @@ static u64 bpf_clone_redirect(u64 r1, u64 ifindex, u64 flags, u64 r4, u64 r5)
 		return -ENOMEM;
 
 	if (flags & BPF_F_INGRESS) {
-		if (skb_at_tc_ingress(skb2))
+		if ((G_TC_AT(skb2->tc_verd) & AT_INGRESS))
 			skb_postpush_rcsum(skb2, skb_mac_header(skb2),
 					   skb2->mac_len);
 		return dev_forward_skb(dev, skb2);
@@ -1448,7 +1448,7 @@ int skb_do_redirect(struct sk_buff *skb)
 	}
 
 	if (ri->flags & BPF_F_INGRESS) {
-		if (skb_at_tc_ingress(skb))
+		if ((G_TC_AT(skb->tc_verd) & AT_INGRESS))
 			skb_postpush_rcsum(skb, skb_mac_header(skb),
 					   skb->mac_len);
 		return dev_forward_skb(dev, skb);
