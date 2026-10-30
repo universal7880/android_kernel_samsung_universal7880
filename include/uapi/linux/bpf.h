@@ -337,6 +337,8 @@ enum bpf_func_id {
 	 * Return: current
 	 */
 	BPF_FUNC_get_current_task,
+	BPF_FUNC_probe_write_user,
+	BPF_FUNC_current_task_under_cgroup,
 
 	__BPF_FUNC_MAX_ID,
 };
