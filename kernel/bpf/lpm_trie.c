@@ -140,8 +140,7 @@ struct lpm_trie {
  * An intermediate node will be turned into a 'real' node on demand. In the
  * example above, (4) would be re-used if 192.168.0.0/23 is added to the trie.
  *
- * A fully populated trie would have a height of 32 nodes, as the trie was
- * created with a prefix length of 32.
+ * A chain containing every prefix from /0 through /32 has 33 nodes.
  *
  * The lookup starts at the root node. If the current node matches and if there
  * is a child that can be used to become more specific, the trie is traversed
@@ -606,8 +605,8 @@ static int trie_get_next_key(struct bpf_map *map, void *_key, void *_next_key)
 		goto find_leftmost;
 	}
 
-	node_stack = kmalloc(trie->max_prefixlen * sizeof(struct lpm_trie_node *),
-			     GFP_USER | __GFP_NOWARN);
+	node_stack = kmalloc_array(trie->max_prefixlen + 1, sizeof(*node_stack),
+				   GFP_ATOMIC | __GFP_NOWARN);
 	if (!node_stack)
 		return -ENOMEM;
 
@@ -659,7 +658,10 @@ find_leftmost:
 	for (node = rcu_dereference(*root); node;) {
 		if (!(node->flags & LPM_TREE_NODE_FLAG_IM))
 			next_node = node;
-		node = rcu_dereference(node->child[0]);
+		if (rcu_dereference(node->child[0]))
+			node = rcu_dereference(node->child[0]);
+		else
+			node = rcu_dereference(node->child[1]);
 	}
 do_copy:
 	next_key->prefixlen = next_node->prefixlen;
