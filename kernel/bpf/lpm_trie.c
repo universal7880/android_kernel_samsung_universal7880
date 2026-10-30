@@ -279,11 +279,6 @@ static int trie_update_elem(struct bpf_map *map,
 
 	/* Allocate and fill a new node */
 
-	if (trie->n_entries == trie->map.max_entries) {
-		ret = -ENOSPC;
-		goto out;
-	}
-
 	new_node = lpm_trie_node_alloc(trie, value);
 	if (!new_node) {
 		ret = -ENOMEM;
@@ -315,6 +310,15 @@ static int trie_update_elem(struct bpf_map *map,
 
 		next_bit = extract_bit(key->data, node->prefixlen);
 		slot = &node->child[next_bit];
+	}
+
+	/* Replacing an existing value does not consume a new map entry. */
+	if (trie->n_entries > trie->map.max_entries &&
+	    (!node || node->prefixlen != key->prefixlen ||
+	     matchlen != key->prefixlen ||
+	     (node->flags & LPM_TREE_NODE_FLAG_IM))) {
+		ret = -ENOSPC;
+		goto out;
 	}
 
 	/* If the slot is empty (a free child pointer or an empty root),
