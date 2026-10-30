@@ -519,7 +519,7 @@ static int perf_ibs_handle_irq(struct perf_ibs *perf_ibs, struct pt_regs *iregs)
 	struct perf_event *event = pcpu->event;
 	struct hw_perf_event *hwc = &event->hw;
 	struct perf_sample_data data;
-	struct perf_raw_record raw;
+	struct perf_raw_record raw = {};
 	struct pt_regs regs;
 	struct perf_ibs_data ibs_data;
 	int offset, size, check_rip, offset_max, throttle = 0;
@@ -576,8 +576,8 @@ static int perf_ibs_handle_irq(struct perf_ibs *perf_ibs, struct pt_regs *iregs)
 	}
 
 	if (event->attr.sample_type & PERF_SAMPLE_RAW) {
-		raw.size = sizeof(u32) + ibs_data.size;
-		raw.data = ibs_data.data;
+		raw.frag.size = sizeof(u32) + ibs_data.size;
+		raw.frag.data = ibs_data.data;
 		data.raw = &raw;
 	}
 
