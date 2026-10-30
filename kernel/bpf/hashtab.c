@@ -18,7 +18,7 @@
 #include "bpf_lru_list.h"
 
 #define HTAB_CREATE_FLAG_MASK						\
-	(BPF_F_NO_PREALLOC | BPF_F_RDONLY | BPF_F_WRONLY)
+	(BPF_F_NO_PREALLOC | BPF_F_NO_COMMON_LRU | BPF_F_RDONLY | BPF_F_WRONLY)
 
 struct bucket {
 	struct hlist_nulls_head head;
@@ -232,7 +232,7 @@ static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 		 */
 		return ERR_PTR(-EPERM);
 
-	if (attr->map_flags & ~(BPF_F_NO_PREALLOC | BPF_F_NO_COMMON_LRU))
+	if (attr->map_flags & ~HTAB_CREATE_FLAG_MASK)
 		/* reserved bits should not be used */
 		return ERR_PTR(-EINVAL);
 
