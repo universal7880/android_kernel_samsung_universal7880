@@ -326,6 +326,7 @@ enum bpf_func_id {
 	 * Return: 0 on success or negative error
 	 */
 	BPF_FUNC_skb_change_type,
+	BPF_FUNC_skb_under_cgroup,
 
 	__BPF_FUNC_MAX_ID,
 };
