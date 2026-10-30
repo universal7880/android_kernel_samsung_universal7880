@@ -18,7 +18,7 @@
 #include <linux/filter.h>
 #include <linux/version.h>
 
-int sysctl_unprivileged_bpf_disabled __read_mostly;
+int sysctl_unprivileged_bpf_disabled __read_mostly = 1;
 
 static LIST_HEAD(bpf_map_types);
 
