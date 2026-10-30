@@ -489,7 +489,8 @@ static struct bpf_map *trie_alloc(union bpf_attr *attr)
 
 	/* check sanity of attributes */
 	if (attr->max_entries == 0 ||
-	    attr->map_flags != BPF_F_NO_PREALLOC ||
+	    !(attr->map_flags & BPF_F_NO_PREALLOC) ||
+	    attr->map_flags & ~(BPF_F_NO_PREALLOC | BPF_F_RDONLY | BPF_F_WRONLY) ||
 	    attr->key_size < LPM_KEY_SIZE_MIN ||
 	    attr->key_size > LPM_KEY_SIZE_MAX ||
 	    attr->value_size < LPM_VAL_SIZE_MIN ||
@@ -505,6 +506,7 @@ static struct bpf_map *trie_alloc(union bpf_attr *attr)
 	trie->map.key_size = attr->key_size;
 	trie->map.value_size = attr->value_size;
 	trie->map.max_entries = attr->max_entries;
+	trie->map.map_flags = attr->map_flags;
 	trie->data_size = attr->key_size -
 			  offsetof(struct bpf_lpm_trie_key, data);
 	trie->max_prefixlen = trie->data_size * 8;
