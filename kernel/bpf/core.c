@@ -920,21 +920,26 @@ load_byte:
 		return 0;
 }
 
+static DEFINE_SPINLOCK(bpf_array_owner_lock);
+
 bool bpf_prog_array_compatible(struct bpf_array *array,
 			       const struct bpf_prog *fp)
 {
-	if (!array->owner_prog_type) {
-		/* There's no owner yet where we could check for
-		 * compatibility.
-		 */
-		array->owner_prog_type = fp->type;
-		array->owner_jited = fp->jited;
+	bool compatible;
 
-		return true;
+	/* Both program loading and map updates may claim an unowned array. */
+	spin_lock_bh(&bpf_array_owner_lock);
+	if (!array->owner_prog_type) {
+		array->owner_prog_type = fp->type;
+		array->owner_attach_type = fp->expected_attach_type;
+		array->owner_jited = fp->jited;
 	}
 
-	return array->owner_prog_type == fp->type &&
-	       array->owner_jited == fp->jited;
+	compatible = array->owner_prog_type == fp->type &&
+		     array->owner_attach_type == fp->expected_attach_type &&
+		     array->owner_jited == fp->jited;
+	spin_unlock_bh(&bpf_array_owner_lock);
+	return compatible;
 }
 
 static int bpf_check_tail_call(const struct bpf_prog *fp)
