@@ -5449,7 +5449,7 @@ void cgroup_sk_clone(struct sock_cgroup_data *skcd)
 		 * cgroup and the cgroup might have already been rmdir'd.
 		 * Don't use cgroup_get_live().
 		 */
-		cgroup_get(sock_cgroup_ptr(skcd));
+		css_get(&sock_cgroup_ptr(skcd)->self);
 	}
 }
 
