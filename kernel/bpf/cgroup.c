@@ -277,7 +277,8 @@ cleanup:
 		desc->bpf.inactive = NULL;
 	}
 
-	/* and cleanup the prog list */
+	/* and restore the attach policy and program list */
+	cgrp->bpf.flags[type] = old_flags;
 	pl->prog = old_prog;
 	if (pl_was_allocated) {
 		list_del(&pl->node);
