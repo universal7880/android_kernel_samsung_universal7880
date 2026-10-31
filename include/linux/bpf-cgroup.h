@@ -159,6 +159,8 @@ int __cgroup_bpf_run_filter_sock_addr(struct sock *sk,
 
 #else
 
+#define cgroup_bpf_enabled 0
+
 struct cgroup_bpf {};
 static inline void cgroup_bpf_put(struct cgroup *cgrp) {}
 static inline int cgroup_bpf_inherit(struct cgroup *cgrp) { return 0; }
