@@ -391,7 +391,7 @@ struct bpf_prog {
 	enum bpf_prog_type	type;		/* Type of BPF program */
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
-	unsigned int		(*bpf_func)(const struct sk_buff *skb,
+	unsigned int		(*bpf_func)(const void *ctx,
 					    const struct bpf_insn *filter);
 	/* Instructions for interpreter */
 	union {
