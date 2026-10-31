@@ -646,8 +646,10 @@ static struct htab_elem *alloc_htab_elem(struct bpf_htab *htab, void *key,
 		} else {
 			l_new = kmalloc(htab->elem_size,
 					GFP_ATOMIC | __GFP_NOWARN);
-			if (!l_new)
+			if (!l_new) {
+				atomic_dec(&htab->count);
 				return ERR_PTR(-ENOMEM);
+			}
 		}
 	}
 
@@ -678,6 +680,7 @@ static struct htab_elem *alloc_htab_elem(struct bpf_htab *htab, void *key,
 			pptr = __alloc_percpu_gfp(size, 8,
 						  GFP_ATOMIC | __GFP_NOWARN);
 			if (!pptr) {
+				atomic_dec(&htab->count);
 				kfree(l_new);
 				return ERR_PTR(-ENOMEM);
 			}
