@@ -1163,7 +1163,7 @@ static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 				   const union bpf_attr *attr,
 				   union bpf_attr __user *uattr)
 {
-	struct bpf_prog_info __user *uinfo = u64_to_user_ptr(attr->info.info);
+	struct bpf_prog_info __user *uinfo = u64_to_ptr(attr->info.info);
 	struct bpf_prog_info info = {};
 	u32 info_len = attr->info.info_len;
 	char __user *uinsns;
@@ -1190,7 +1190,7 @@ static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 	ulen = info.jited_prog_len;
 	info.jited_prog_len = prog->jited_len;
 	if (info.jited_prog_len && ulen) {
-		uinsns = u64_to_user_ptr(info.jited_prog_insns);
+		uinsns = u64_to_ptr(info.jited_prog_insns);
 		ulen = min_t(u32, info.jited_prog_len, ulen);
 		if (copy_to_user(uinsns, prog->bpf_func, ulen))
 			return -EFAULT;
@@ -1199,7 +1199,7 @@ static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 	ulen = info.xlated_prog_len;
 	info.xlated_prog_len = prog->len * sizeof(struct bpf_insn);
 	if (info.xlated_prog_len && ulen) {
-		uinsns = u64_to_user_ptr(info.xlated_prog_insns);
+		uinsns = u64_to_ptr(info.xlated_prog_insns);
 		ulen = min_t(u32, info.xlated_prog_len, ulen);
 		if (copy_to_user(uinsns, prog->insnsi, ulen))
 			return -EFAULT;
@@ -1217,7 +1217,7 @@ static int bpf_map_get_info_by_fd(struct bpf_map *map,
 				  const union bpf_attr *attr,
 				  union bpf_attr __user *uattr)
 {
-	struct bpf_map_info __user *uinfo = u64_to_user_ptr(attr->info.info);
+	struct bpf_map_info __user *uinfo = u64_to_ptr(attr->info.info);
 	struct bpf_map_info info = {};
 	u32 info_len = attr->info.info_len;
 	int err;
