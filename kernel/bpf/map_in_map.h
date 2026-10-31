@@ -19,5 +19,6 @@ bool bpf_map_meta_equal(const struct bpf_map *meta0,
 void *bpf_map_fd_get_ptr(struct bpf_map *map, struct file *map_file,
 			 int ufd);
 void bpf_map_fd_put_ptr(void *ptr);
+int bpf_map_get_inner_id(struct bpf_map *map, void *key, u32 *id);
 
 #endif

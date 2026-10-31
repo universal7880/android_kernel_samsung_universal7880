@@ -96,3 +96,19 @@ void bpf_map_fd_put_ptr(void *ptr)
 	 */
 	bpf_map_put(ptr);
 }
+
+/* Return the public ID while the inner map is still RCU-protected. */
+int bpf_map_get_inner_id(struct bpf_map *map, void *key, u32 *id)
+{
+	struct bpf_map *inner;
+	int err = -ENOENT;
+
+	rcu_read_lock();
+	inner = map->ops->map_lookup_elem(map, key);
+	if (inner) {
+		*id = inner->id;
+		err = 0;
+	}
+	rcu_read_unlock();
+	return err;
+}

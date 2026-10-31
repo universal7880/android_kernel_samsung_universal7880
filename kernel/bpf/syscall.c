@@ -10,6 +10,7 @@
  * General Public License for more details.
  */
 #include <linux/bpf.h>
+#include "map_in_map.h"
 #include <linux/syscalls.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
@@ -511,7 +512,7 @@ static int map_lookup_elem(union bpf_attr *attr)
 		err = bpf_stackmap_copy(map, key, value);
 	} else if (map->map_type == BPF_MAP_TYPE_ARRAY_OF_MAPS ||
 		   map->map_type == BPF_MAP_TYPE_HASH_OF_MAPS) {
-		err = -ENOTSUPP;
+		err = bpf_map_get_inner_id(map, key, value);
 	} else {
 		rcu_read_lock();
 		ptr = map->ops->map_lookup_elem(map, key);
