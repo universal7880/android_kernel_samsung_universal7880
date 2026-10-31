@@ -303,6 +303,7 @@ static int map_create(union bpf_attr *attr)
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
+	map->map_flags = attr->map_flags;
 	atomic_set(&map->refcnt, 1);
 	atomic_set(&map->usercnt, 1);
 
@@ -326,7 +327,7 @@ static int map_create(union bpf_attr *attr)
 		 * to the userspace and the userspace may
 		 * have refcnt-ed it through BPF_MAP_GET_FD_BY_ID.
 		 */
-		bpf_map_put(map);
+		bpf_map_put_with_uref(map);
 		return err;
 	}
 
@@ -1125,9 +1126,9 @@ static int bpf_map_get_fd_by_id(const union bpf_attr *attr)
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
-	fd = bpf_map_new_fd(map, 0);
+	fd = bpf_map_new_fd(map, O_RDWR);
 	if (fd < 0)
-		bpf_map_put(map);
+		bpf_map_put_with_uref(map);
 
 	return fd;
 }
@@ -1175,7 +1176,7 @@ static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 	info_len = min_t(u32, sizeof(info), info_len);
 
 	if (copy_from_user(&info, uinfo, info_len))
-		return err;
+		return -EFAULT;
 
 	info.type = prog->type;
 	info.id = prog->aux->id;
@@ -1196,7 +1197,7 @@ static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 	}
 
 	ulen = info.xlated_prog_len;
-	info.xlated_prog_len = bpf_prog_size(prog->len);
+	info.xlated_prog_len = prog->len * sizeof(struct bpf_insn);
 	if (info.xlated_prog_len && ulen) {
 		uinsns = u64_to_user_ptr(info.xlated_prog_insns);
 		ulen = min_t(u32, info.xlated_prog_len, ulen);
