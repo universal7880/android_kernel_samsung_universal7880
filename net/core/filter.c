@@ -2121,7 +2121,7 @@ static const struct bpf_func_proto bpf_get_socket_uid_proto = {
 };
 
 static const struct bpf_func_proto *
-sk_filter_func_proto(enum bpf_func_id func_id)
+bpf_base_func_proto(enum bpf_func_id func_id)
 {
 	switch (func_id) {
 	case BPF_FUNC_map_lookup_elem:
@@ -2139,14 +2139,22 @@ sk_filter_func_proto(enum bpf_func_id func_id)
 	case BPF_FUNC_ktime_get_ns:
 		return &bpf_ktime_get_ns_proto;
 	case BPF_FUNC_trace_printk:
-		if (capable(CAP_SYS_ADMIN))
-			return bpf_get_trace_printk_proto();
+		return capable(CAP_SYS_ADMIN) ? bpf_get_trace_printk_proto() : NULL;
+	default:
+		return NULL;
+	}
+}
+
+static const struct bpf_func_proto *
+sk_filter_func_proto(enum bpf_func_id func_id)
+{
+	switch (func_id) {
 	case BPF_FUNC_get_socket_cookie:
 		return &bpf_get_socket_cookie_proto;
 	case BPF_FUNC_get_socket_uid:
 		return &bpf_get_socket_uid_proto;
 	default:
-		return NULL;
+		return bpf_base_func_proto(func_id);
 	}
 }
 
