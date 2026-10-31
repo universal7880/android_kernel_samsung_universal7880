@@ -210,6 +210,7 @@ struct bpf_array {
 	 * prog_type and JITed flag
 	 */
 	enum bpf_prog_type owner_prog_type;
+	enum bpf_attach_type owner_attach_type;
 	bool owner_jited;
 	union {
 		char value[0] __aligned(8);
