@@ -1034,29 +1034,28 @@ int bpf_prog_array_length(struct bpf_prog_array __rcu *progs)
 }
 
 int bpf_prog_array_copy_to_user(struct bpf_prog_array __rcu *progs,
-				__u32 __user *prog_ids, u32 cnt)
+			      __u32 __user *prog_ids, u32 cnt)
 {
 	struct bpf_prog **prog;
 	u32 i = 0, id;
+	int ret = 0;
 
 	rcu_read_lock();
 	prog = rcu_dereference(progs)->progs;
-	for (; *prog; prog++) {
+	for (; *prog && i < cnt; prog++, i++) {
 		id = (*prog)->aux->id;
 		if (copy_to_user(prog_ids + i, &id, sizeof(id))) {
-			rcu_read_unlock();
-			return -EFAULT;
-		}
-		if (++i == cnt) {
-			prog++;
-			break;
+			ret = -EFAULT;
+			goto out;
 		}
 	}
-	rcu_read_unlock();
 	if (*prog)
-		return -ENOSPC;
-	return 0;
+		ret = -ENOSPC;
+out:
+	rcu_read_unlock();
+	return ret;
 }
+
 
 static void bpf_prog_free_deferred(struct work_struct *work)
 {
