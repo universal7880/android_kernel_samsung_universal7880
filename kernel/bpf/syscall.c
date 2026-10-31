@@ -1188,7 +1188,7 @@ static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 	}
 
 	ulen = info.jited_prog_len;
-	info.jited_prog_len = 0; //prog->jited_len;
+	info.jited_prog_len = prog->jited_len;
 	if (info.jited_prog_len && ulen) {
 		uinsns = u64_to_user_ptr(info.jited_prog_insns);
 		ulen = min_t(u32, info.jited_prog_len, ulen);

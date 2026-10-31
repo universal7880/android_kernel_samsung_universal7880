@@ -387,6 +387,7 @@ struct bpf_prog {
 				dst_needed:1;	/* Do we need dst entry? */
 	kmemcheck_bitfield_end(meta);
 	u32			len;		/* Number of filter blocks */
+	u32			jited_len;	/* Number of JIT image bytes */
 	enum bpf_prog_type	type;		/* Type of BPF program */
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
