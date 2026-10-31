@@ -858,8 +858,28 @@ static int bpf_prog_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+#ifdef CONFIG_PROC_FS
+static int bpf_prog_show_fdinfo(struct seq_file *m, struct file *filp)
+{
+	const struct bpf_prog *prog = filp->private_data;
+
+	return seq_printf(m, "prog_type:\t%u\n"
+			  "prog_jited:\t%u\n"
+			  "prog_tag:\t%*phN\n"
+			  "memlock:\t%llu\n"
+			  "prog_id:\t%u\n",
+			  prog->type, prog->jited,
+			  (int)sizeof(prog->tag), prog->tag,
+			  (unsigned long long)prog->pages << PAGE_SHIFT,
+			  prog->aux->id);
+}
+#endif
+
 const struct file_operations bpf_prog_fops = {
-        .release = bpf_prog_release,
+#ifdef CONFIG_PROC_FS
+	.show_fdinfo = bpf_prog_show_fdinfo,
+#endif
+	.release = bpf_prog_release,
 	.read		= bpf_dummy_read,
 	.write		= bpf_dummy_write,
 };
@@ -1232,6 +1252,7 @@ static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 		return -EFAULT;
 
 	info.type = prog->type;
+	memcpy(info.tag, prog->tag, sizeof(info.tag));
 	info.id = prog->aux->id;
 	info.load_time = prog->aux->load_time;
 	info.created_by_uid = from_kuid_munged(current_user_ns(),

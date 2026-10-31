@@ -3272,7 +3272,11 @@ static int replace_map_fd_with_map_ptr(struct bpf_verifier_env *env)
 {
 	struct bpf_insn *insn = env->prog->insnsi;
 	int insn_cnt = env->prog->len;
-	int i, j;
+	int i, j, err;
+
+	err = bpf_prog_calc_tag(env->prog);
+	if (err)
+		return err;
 
 	for (i = 0; i < insn_cnt; i++, insn++) {
 		if (BPF_CLASS(insn->code) == BPF_LDX &&

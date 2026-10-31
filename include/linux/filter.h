@@ -387,6 +387,7 @@ struct bpf_prog {
 				dst_needed:1;	/* Do we need dst entry? */
 	kmemcheck_bitfield_end(meta);
 	u32			len;		/* Number of filter blocks */
+	u8			tag[BPF_TAG_SIZE];
 	u32			jited_len;	/* Number of JIT image bytes */
 	enum bpf_prog_type	type;		/* Type of BPF program */
 	enum bpf_attach_type	expected_attach_type; /* For some prog types */
@@ -457,6 +458,8 @@ static inline u32 bpf_prog_run_clear_cb(const struct bpf_prog *prog,
 		memset(cb_data, 0, QDISC_CB_PRIV_LEN);
 	return BPF_PROG_RUN(prog, skb);
 }
+
+int bpf_prog_calc_tag(struct bpf_prog *prog);
 
 static inline unsigned int bpf_prog_size(unsigned int proglen)
 {
