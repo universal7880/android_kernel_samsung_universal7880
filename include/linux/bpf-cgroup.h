@@ -52,13 +52,15 @@ int __cgroup_bpf_run_filter(struct sock *sk,
 	__ret;								\
 })
 
-#define BPF_CGROUP_RUN_PROG_INET_EGRESS(sk,skb)				\
-({									\
-	int __ret = 0;							\
-	if (cgroup_bpf_enabled && sk && sk == skb->sk) {		\
-		typeof(sk) __sk = sk_to_full_sk(sk);			\
-		if (sk_fullsock(__sk))					\
-			__ret = __cgroup_bpf_run_filter(__sk, skb,	\
+#define BPF_CGROUP_RUN_PROG_INET_EGRESS(_socket, _packet)		\
+({								\
+	struct sock *__sk = (_socket);				\
+	struct sk_buff *__skb = (_packet);			\
+	int __ret = 0;						\
+	if (cgroup_bpf_enabled && __sk && __sk == __skb->sk) {	\
+		__sk = skb_to_full_sk(__skb);			\
+		if (__sk && sk_fullsock(__sk))			\
+			__ret = __cgroup_bpf_run_filter(__sk, __skb,	\
 						BPF_CGROUP_INET_EGRESS); \
 	}								\
 	__ret;								\

@@ -140,7 +140,7 @@ int __cgroup_bpf_run_filter(struct sock *sk,
 	struct cgroup *cgrp;
 	int ret = 0;
 
-	if (!sk || !sk_fullsock(sk))
+	if (!sk || !sk_fullsock(sk) || sk->sk_state == TCP_NEW_SYN_RECV)
 		return 0;
 
 	if (sk->sk_family != AF_INET &&

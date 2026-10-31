@@ -45,6 +45,7 @@
 #include <linux/seccomp.h>
 #include <linux/if_vlan.h>
 #include <linux/bpf.h>
+#include <linux/bpf-cgroup.h>
 #include <net/sch_generic.h>
 #include <net/cls_cgroup.h>
 #include <net/dst.h>
