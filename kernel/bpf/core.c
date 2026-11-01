@@ -623,6 +623,8 @@ static unsigned int __bpf_prog_run(const void *ctx, const struct bpf_insn *insn)
 		[BPF_ALU | BPF_LSH | BPF_X] = &&ALU_LSH_X,
 		[BPF_ALU | BPF_LSH | BPF_K] = &&ALU_LSH_K,
 		[BPF_ALU | BPF_RSH | BPF_X] = &&ALU_RSH_X,
+		[BPF_ALU | BPF_ARSH | BPF_X] = &&ALU_ARSH_X,
+		[BPF_ALU | BPF_ARSH | BPF_K] = &&ALU_ARSH_K,
 		[BPF_ALU | BPF_RSH | BPF_K] = &&ALU_RSH_K,
 		[BPF_ALU | BPF_XOR | BPF_X] = &&ALU_XOR_X,
 		[BPF_ALU | BPF_XOR | BPF_K] = &&ALU_XOR_K,
@@ -797,6 +799,12 @@ select_insn:
 	LD_IMM_DW:
 		DST = (u64) (u32) insn[0].imm | ((u64) (u32) insn[1].imm) << 32;
 		insn++;
+		CONT;
+	ALU_ARSH_X:
+		DST = (u32) ((s32) DST >> (SRC & 31));
+		CONT;
+	ALU_ARSH_K:
+		DST = (u32) ((s32) DST >> IMM);
 		CONT;
 	ALU64_ARSH_X:
 		(*(s64 *) &DST) >>= SRC;
