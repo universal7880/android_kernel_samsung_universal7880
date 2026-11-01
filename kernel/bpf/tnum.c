@@ -144,6 +144,8 @@ struct tnum tnum_intersect(struct tnum a, struct tnum b)
 
 struct tnum tnum_cast(struct tnum a, u8 size)
 {
+	if (size >= sizeof(a.value))
+		return a;
 	a.value &= (1ULL << (size * 8)) - 1;
 	a.mask &= (1ULL << (size * 8)) - 1;
 	return a;
@@ -173,6 +175,9 @@ EXPORT_SYMBOL_GPL(tnum_strn);
 int tnum_sbin(char *str, size_t size, struct tnum a)
 {
 	size_t n;
+
+	if (!size)
+		return 64;
 
 	for (n = 64; n; n--) {
 		if (n < size) {
