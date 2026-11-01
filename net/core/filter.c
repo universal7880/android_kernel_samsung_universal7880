@@ -2138,6 +2138,18 @@ static int bpf_skb_adjust_net(struct sk_buff *skb, s32 len_diff)
 		     proto != htons(ETH_P_IPV6)))
 		return -ENOTSUPP;
 
+	if (skb_is_gso(skb)) {
+		struct skb_shared_info *shinfo = skb_shinfo(skb);
+
+		/* Only TCP has MSS semantics here. Do not wrap the old
+		 * 16-bit gso_size or create a zero-sized segment.
+		 */
+		if (!(shinfo->gso_type & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6)) ||
+		    (!shrink && len_diff_abs >= shinfo->gso_size) ||
+		    (shrink && shinfo->gso_size > 0xffffU - len_diff_abs))
+			return -ENOTSUPP;
+	}
+
 	len_cur = skb->len - skb_network_offset(skb);
 	if (skb_transport_header_was_set(skb) && !trans_same)
 		len_cur = skb_network_header_len(skb);
