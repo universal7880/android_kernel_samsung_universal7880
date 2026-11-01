@@ -188,6 +188,8 @@ static int bpf_adj_branches(struct bpf_prog *prog, u32 pos, u32 delta,
 		if (probe_pass && i == pos) {
 			i += delta + 1;
 			insn++;
+			if (i >= insn_cnt)
+				break;
 		}
 
 		if (!bpf_is_jmp_and_has_target(insn))
