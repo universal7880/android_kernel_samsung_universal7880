@@ -824,7 +824,9 @@ static inline void bpf_flush_icache(void *start, void *end)
 
 struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 {
+	struct bpf_prog *tmp, *orig_prog = prog;
 	struct bpf_binary_header *header;
+	bool tmp_blinded = false;
 	struct jit_ctx ctx;
 	int image_size;
 	u8 *image_ptr;
@@ -835,18 +837,30 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	if (!prog || !prog->len)
 		return prog;
 
+	tmp = bpf_jit_blind_constants(prog);
+	if (IS_ERR(tmp))
+		return orig_prog;
+	if (tmp != prog) {
+		tmp_blinded = true;
+		prog = tmp;
+	}
+
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.prog = prog;
 
 	ctx.offset = kcalloc(prog->len, sizeof(int), GFP_KERNEL);
-	if (ctx.offset == NULL)
-		return prog;
+	if (ctx.offset == NULL) {
+		prog = orig_prog;
+		goto out;
+	}
 
 	/* 1. Initial fake pass to compute ctx->idx. */
 
 	/* Fake pass to fill in instruction and tail-call offsets. */
-	if (build_body(&ctx))
-		goto out;
+	if (build_body(&ctx)) {
+		prog = orig_prog;
+		goto out_off;
+	}
 
 	build_prologue(&ctx);
 
@@ -857,8 +871,10 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	image_size = sizeof(u32) * ctx.idx;
 	header = bpf_jit_binary_alloc(image_size, &image_ptr,
 				      sizeof(u32), jit_fill_hole);
-	if (header == NULL)
-		goto out;
+	if (header == NULL) {
+		prog = orig_prog;
+		goto out_off;
+	}
 
 	/* 2. Now, the actual pass. */
 
@@ -868,12 +884,14 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	build_prologue(&ctx);
 	if (ctx.idx != PROLOGUE_OFFSET) {
 		bpf_jit_binary_free(header);
-		goto out;
+		prog = orig_prog;
+		goto out_off;
 	}
 
 	if (build_body(&ctx)) {
 		bpf_jit_binary_free(header);
-		goto out;
+		prog = orig_prog;
+		goto out_off;
 	}
 
 	build_epilogue(&ctx);
@@ -881,7 +899,8 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	/* Reject encoder failures and unfilled instruction slots. */
 	if (validate_code(&ctx)) {
 		bpf_jit_binary_free(header);
-		goto out;
+		prog = orig_prog;
+		goto out_off;
 	}
 
 	/* And we're done. */
@@ -894,8 +913,12 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	prog->bpf_func = (void *)ctx.image;
 	prog->jited_len = image_size;
 	prog->jited = 1;
-out:
+out_off:
 	kfree(ctx.offset);
+out:
+	if (tmp_blinded)
+		bpf_jit_prog_release_other(prog, prog == orig_prog ?
+					   tmp : orig_prog);
 	return prog;
 }
 
