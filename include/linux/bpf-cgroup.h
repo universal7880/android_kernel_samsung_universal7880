@@ -68,6 +68,11 @@ int __cgroup_bpf_run_filter_sock_addr(struct sock *sk,
 				      enum bpf_attach_type type,
 				      void *t_ctx);
 
+int __cgroup_bpf_run_filter_setsockopt(struct sock *sk, int *level,
+		int *optname, char __user *optval, int *optlen, char **kernel_optval);
+int __cgroup_bpf_run_filter_getsockopt(struct sock *sk, int level, int optname,
+		char __user *optval, int __user *optlen, int max_optlen, int retval);
+
 /* Wrappers for __cgroup_bpf_run_filter() guarded by cgroup_bpf_enabled. */
 #define BPF_CGROUP_RUN_PROG_INET_INGRESS(sk,skb)			\
 ({									\
@@ -157,6 +162,18 @@ int __cgroup_bpf_run_filter_sock_addr(struct sock *sk,
 #define BPF_CGROUP_RUN_PROG_UDP6_RECVMSG_LOCK(sk, uaddr)			\
 	BPF_CGROUP_RUN_SA_PROG_LOCK(sk, uaddr, BPF_CGROUP_UDP6_RECVMSG, NULL)
 
+#define BPF_CGROUP_RUN_PROG_SETSOCKOPT(sk, level, name, val, len, kval) \
+	__cgroup_bpf_run_filter_setsockopt(sk, level, name, val, len, kval)
+#define BPF_CGROUP_RUN_PROG_GETSOCKOPT(sk, level, name, val, len, maxlen, ret) \
+	__cgroup_bpf_run_filter_getsockopt(sk, level, name, val, len, maxlen, ret)
+#define BPF_CGROUP_GETSOCKOPT_MAX_OPTLEN(optlen) \
+({ \
+	int __length = 0; \
+	if (cgroup_bpf_enabled) \
+		get_user(__length, optlen); \
+	__length; \
+})
+
 #else
 
 #define cgroup_bpf_enabled 0
@@ -179,6 +196,10 @@ static inline int cgroup_bpf_inherit(struct cgroup *cgrp) { return 0; }
 #define BPF_CGROUP_RUN_PROG_UDP6_SENDMSG_LOCK(sk, uaddr, t_ctx) ({ 0; })
 #define BPF_CGROUP_RUN_PROG_UDP4_RECVMSG_LOCK(sk, uaddr) ({ 0; })
 #define BPF_CGROUP_RUN_PROG_UDP6_RECVMSG_LOCK(sk, uaddr) ({ 0; })
+
+#define BPF_CGROUP_RUN_PROG_SETSOCKOPT(sk, level, name, val, len, kval) (0)
+#define BPF_CGROUP_RUN_PROG_GETSOCKOPT(sk, level, name, val, len, maxlen, ret) (ret)
+#define BPF_CGROUP_GETSOCKOPT_MAX_OPTLEN(optlen) (0)
 
 #endif /* CONFIG_CGROUP_BPF */
 

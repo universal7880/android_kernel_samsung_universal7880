@@ -1040,6 +1040,10 @@ static int bpf_prog_load(union bpf_attr *attr)
 		    attr->expected_attach_type != BPF_CGROUP_UDP4_RECVMSG &&
 		    attr->expected_attach_type != BPF_CGROUP_UDP6_RECVMSG)
 			return -EINVAL;
+	} else if (type == BPF_PROG_TYPE_CGROUP_SOCKOPT) {
+		if (attr->expected_attach_type != BPF_CGROUP_GETSOCKOPT &&
+		    attr->expected_attach_type != BPF_CGROUP_SETSOCKOPT)
+			return -EINVAL;
 	} else if (attr->expected_attach_type) {
 		return -EINVAL;
 	}
@@ -1495,6 +1499,27 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 		cgroup_put(cgrp);
 		break;
 
+	case BPF_CGROUP_GETSOCKOPT:
+	case BPF_CGROUP_SETSOCKOPT:
+		prog = bpf_prog_get_type(attr->attach_bpf_fd,
+					 BPF_PROG_TYPE_CGROUP_SOCKOPT);
+		if (IS_ERR(prog))
+			return PTR_ERR(prog);
+		if (prog->expected_attach_type != attr->attach_type) {
+			bpf_prog_put(prog);
+			return -EINVAL;
+		}
+		cgrp = cgroup_get_from_fd(attr->target_fd);
+		if (IS_ERR(cgrp)) {
+			bpf_prog_put(prog);
+			return PTR_ERR(cgrp);
+		}
+		ret = cgroup_bpf_attach(cgrp, prog, attr->attach_type,
+					attr->attach_flags);
+		if (ret)
+			bpf_prog_put(prog);
+		cgroup_put(cgrp);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1538,6 +1563,10 @@ static int bpf_prog_detach(const union bpf_attr *attr)
 		ptype = BPF_PROG_TYPE_CGROUP_SOCK_ADDR;
 		break;
 
+	case BPF_CGROUP_GETSOCKOPT:
+	case BPF_CGROUP_SETSOCKOPT:
+		ptype = BPF_PROG_TYPE_CGROUP_SOCKOPT;
+		break;
 	default:
 		return -EINVAL;
 	}

@@ -58,6 +58,7 @@
  *	Based upon Swansea University Computer Society NET3.039
  */
 
+#include <linux/bpf-cgroup.h>
 #include <linux/mm.h>
 #include <linux/socket.h>
 #include <linux/file.h>
@@ -1920,6 +1921,7 @@ SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
 {
 	int err, fput_needed;
 	struct socket *sock;
+	char *kernel_optval = NULL;
 
 	if (optlen < 0)
 		return -EINVAL;
@@ -1929,6 +1931,21 @@ SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
 		err = security_socket_setsockopt(sock, level, optname);
 		if (err)
 			goto out_put;
+
+		err = BPF_CGROUP_RUN_PROG_SETSOCKOPT(sock->sk, &level, &optname,
+						    optval, &optlen, &kernel_optval);
+		if (err < 0)
+			goto out_put;
+		if (err > 0) {
+			err = 0;
+			goto out_put;
+		}
+		if (kernel_optval) {
+			err = kernel_setsockopt(sock, level, optname,
+						kernel_optval, optlen);
+			kfree(kernel_optval);
+			goto out_put;
+		}
 
 		if (level == SOL_SOCKET)
 			err =
@@ -1954,12 +1971,15 @@ SYSCALL_DEFINE5(getsockopt, int, fd, int, level, int, optname,
 {
 	int err, fput_needed;
 	struct socket *sock;
+	int max_optlen;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock != NULL) {
 		err = security_socket_getsockopt(sock, level, optname);
 		if (err)
 			goto out_put;
+
+		max_optlen = BPF_CGROUP_GETSOCKOPT_MAX_OPTLEN(optlen);
 
 		if (level == SOL_SOCKET)
 			err =
@@ -1969,6 +1989,9 @@ SYSCALL_DEFINE5(getsockopt, int, fd, int, level, int, optname,
 			err =
 			    sock->ops->getsockopt(sock, level, optname, optval,
 						  optlen);
+		err = BPF_CGROUP_RUN_PROG_GETSOCKOPT(sock->sk, level, optname,
+					 optval, optlen, max_optlen, err);
+
 out_put:
 		fput_light(sock->file, fput_needed);
 	}

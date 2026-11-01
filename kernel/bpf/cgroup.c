@@ -540,3 +540,151 @@ int __cgroup_bpf_run_filter_sk(struct sock *sk,
 	return ret == 1 ? 0 : -EPERM;
 }
 EXPORT_SYMBOL(__cgroup_bpf_run_filter_sk);
+
+static bool __cgroup_bpf_prog_array_is_empty(struct cgroup *cgrp,
+					     enum bpf_attach_type type)
+{
+	struct bpf_prog_array *array;
+	bool empty;
+
+	rcu_read_lock();
+	array = rcu_dereference(cgrp->bpf.effective[type]);
+	empty = bpf_prog_array_is_empty(array);
+	rcu_read_unlock();
+	return empty;
+}
+
+static int sockopt_alloc_buf(struct bpf_sockopt_kern *ctx, int length)
+{
+	if (length < 0)
+		return -EINVAL;
+	length = min_t(int, length, PAGE_SIZE);
+	ctx->optval = kzalloc(length, GFP_USER);
+	if (!ctx->optval)
+		return -ENOMEM;
+	ctx->optval_end = ctx->optval + length;
+	return length;
+}
+
+int __cgroup_bpf_run_filter_setsockopt(struct sock *sk, int *level,
+				       int *optname, char __user *optval,
+				       int *optlen, char **kernel_optval)
+{
+	struct cgroup *cgrp;
+	struct bpf_sockopt_kern ctx = {
+		.sk = sk,
+		.level = *level,
+		.optname = *optname,
+	};
+	int ret, capacity;
+
+	*kernel_optval = NULL;
+	if (!sk || !cgroup_bpf_enabled)
+		return 0;
+	cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
+	if (__cgroup_bpf_prog_array_is_empty(cgrp, BPF_CGROUP_SETSOCKOPT))
+		return 0;
+	if (*optlen < 0)
+		return -EINVAL;
+
+	/* Permit a small option, such as TCP_CONGESTION, to grow. */
+	capacity = sockopt_alloc_buf(&ctx, max_t(int, 16, *optlen));
+	if (capacity < 0)
+		return capacity;
+	ctx.optlen = *optlen;
+	if (copy_from_user(ctx.optval, optval, min(*optlen, capacity))) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	lock_sock(sk);
+	ret = BPF_PROG_RUN_ARRAY(cgrp->bpf.effective[BPF_CGROUP_SETSOCKOPT],
+				 &ctx, BPF_PROG_RUN);
+	release_sock(sk);
+	if (ret != 1) {
+		ret = -EPERM;
+		goto out;
+	}
+	if (ctx.optlen == -1) {
+		ret = 1;
+	} else if (ctx.optlen < -1 || ctx.optlen > capacity) {
+		ret = -EFAULT;
+	} else {
+		ret = 0;
+		*level = ctx.level;
+		*optname = ctx.optname;
+		/* Zero delegates to the original userspace buffer. */
+		if (ctx.optlen) {
+			*optlen = ctx.optlen;
+			*kernel_optval = (char *)ctx.optval;
+		}
+	}
+out:
+	if (!*kernel_optval)
+		kfree(ctx.optval);
+	return ret;
+}
+EXPORT_SYMBOL(__cgroup_bpf_run_filter_setsockopt);
+
+int __cgroup_bpf_run_filter_getsockopt(struct sock *sk, int level,
+				       int optname, char __user *optval,
+				       int __user *optlen, int max_optlen,
+				       int retval)
+{
+	struct cgroup *cgrp;
+	struct bpf_sockopt_kern ctx = {
+		.sk = sk,
+		.level = level,
+		.optname = optname,
+		.retval = retval,
+		.optlen = max_optlen,
+	};
+	int ret, capacity;
+
+	if (!sk || !cgroup_bpf_enabled)
+		return retval;
+	cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
+	if (__cgroup_bpf_prog_array_is_empty(cgrp, BPF_CGROUP_GETSOCKOPT))
+		return retval;
+	capacity = sockopt_alloc_buf(&ctx, max_optlen);
+	if (capacity < 0)
+		return capacity;
+
+	if (!retval) {
+		/* Re-read a userspace length only after checking its sign. */
+		if (get_user(ctx.optlen, optlen) || ctx.optlen < 0) {
+			ret = -EFAULT;
+			goto out;
+		}
+		if (copy_from_user(ctx.optval, optval,
+				   min(ctx.optlen, capacity))) {
+			ret = -EFAULT;
+			goto out;
+		}
+	}
+
+	lock_sock(sk);
+	ret = BPF_PROG_RUN_ARRAY(cgrp->bpf.effective[BPF_CGROUP_GETSOCKOPT],
+				 &ctx, BPF_PROG_RUN);
+	release_sock(sk);
+	if (ret != 1) {
+		ret = -EPERM;
+		goto out;
+	}
+	if (ctx.optlen < 0 || ctx.optlen > capacity ||
+	    (ctx.retval && ctx.retval != retval)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	if (ctx.optlen &&
+	    (copy_to_user(optval, ctx.optval, ctx.optlen) ||
+	     put_user(ctx.optlen, optlen))) {
+		ret = -EFAULT;
+		goto out;
+	}
+	ret = ctx.retval;
+out:
+	kfree(ctx.optval);
+	return ret;
+}
+EXPORT_SYMBOL(__cgroup_bpf_run_filter_getsockopt);

@@ -1244,6 +1244,12 @@ void bpf_prog_array_free(struct bpf_prog_array __rcu *progs)
 	kfree_rcu(progs, rcu);
 }
 
+bool bpf_prog_array_is_empty(struct bpf_prog_array *array)
+{
+	/* Effective arrays are immutable until replaced under RCU. */
+	return !array || !READ_ONCE(array->progs[0]);
+}
+
 int bpf_prog_array_length(struct bpf_prog_array __rcu *progs)
 {
 	struct bpf_prog **prog;

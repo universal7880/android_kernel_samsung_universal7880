@@ -3263,6 +3263,122 @@ static u32 sock_addr_convert_ctx_access(enum bpf_access_type type,
 	return insn - insn_buf;
 }
 
+static const struct bpf_func_proto *
+cg_sockopt_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
+{
+	switch (func_id) {
+	case BPF_FUNC_get_current_uid_gid:
+		return &bpf_get_current_uid_gid_proto;
+	case BPF_FUNC_get_current_pid_tgid:
+		return &bpf_get_current_pid_tgid_proto;
+	default:
+		return bpf_base_func_proto(func_id, prog);
+	}
+}
+
+static bool cg_sockopt_is_valid_access(int off, int size,
+				       enum bpf_access_type type,
+				       enum bpf_reg_type *reg_type,
+				       const struct bpf_prog *prog)
+{
+	if (size <= 0 || off < 0 || off >= sizeof(struct bpf_sockopt) ||
+	    size > sizeof(struct bpf_sockopt) - off || off % size)
+		return false;
+
+	if (type == BPF_WRITE) {
+		if (size != sizeof(__u32))
+			return false;
+		switch (off) {
+		case offsetof(struct bpf_sockopt, retval):
+			return prog->expected_attach_type == BPF_CGROUP_GETSOCKOPT;
+		case offsetof(struct bpf_sockopt, level):
+		case offsetof(struct bpf_sockopt, optname):
+			return prog->expected_attach_type == BPF_CGROUP_SETSOCKOPT;
+		case offsetof(struct bpf_sockopt, optlen):
+			return true;
+		default:
+			return false;
+		}
+	}
+	if (type != BPF_READ)
+		return false;
+	switch (off) {
+	case offsetof(struct bpf_sockopt, sk):
+		if (size != sizeof(__u64))
+			return false;
+		*reg_type = PTR_TO_SOCKET;
+		return true;
+	case offsetof(struct bpf_sockopt, optval):
+		if (size != sizeof(__u64))
+			return false;
+		*reg_type = PTR_TO_PACKET;
+		return true;
+	case offsetof(struct bpf_sockopt, optval_end):
+		if (size != sizeof(__u64))
+			return false;
+		*reg_type = PTR_TO_PACKET_END;
+		return true;
+	case offsetof(struct bpf_sockopt, retval):
+		return size == sizeof(__u32) &&
+		       prog->expected_attach_type == BPF_CGROUP_GETSOCKOPT;
+	case offsetof(struct bpf_sockopt, level):
+	case offsetof(struct bpf_sockopt, optname):
+	case offsetof(struct bpf_sockopt, optlen):
+		return size == sizeof(__u32);
+	default:
+		return false;
+	}
+}
+
+#define CG_SOCKOPT_ACCESS_FIELD(T, F)					\
+	T(BPF_FIELD_SIZEOF(struct bpf_sockopt_kern, F),			\
+	  dst_reg, src_reg,					\
+	  offsetof(struct bpf_sockopt_kern, F))
+static u32 cg_sockopt_convert_ctx_access(enum bpf_access_type type,
+					 int dst_reg, int src_reg,
+					 int ctx_off,
+					 struct bpf_insn *insn_buf,
+					 struct bpf_prog *prog)
+{
+	struct bpf_insn *insn = insn_buf;
+	switch (ctx_off) {
+	case offsetof(struct bpf_sockopt, sk):
+		*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_LDX_MEM, sk);
+		break;
+	case offsetof(struct bpf_sockopt, level):
+		if (type == BPF_WRITE)
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_STX_MEM, level);
+		else
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_LDX_MEM, level);
+		break;
+	case offsetof(struct bpf_sockopt, optname):
+		if (type == BPF_WRITE)
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_STX_MEM, optname);
+		else
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_LDX_MEM, optname);
+		break;
+	case offsetof(struct bpf_sockopt, optlen):
+		if (type == BPF_WRITE)
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_STX_MEM, optlen);
+		else
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_LDX_MEM, optlen);
+		break;
+	case offsetof(struct bpf_sockopt, retval):
+		if (type == BPF_WRITE)
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_STX_MEM, retval);
+		else
+			*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_LDX_MEM, retval);
+		break;
+	case offsetof(struct bpf_sockopt, optval):
+		*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_LDX_MEM, optval);
+		break;
+	case offsetof(struct bpf_sockopt, optval_end):
+		*insn++ = CG_SOCKOPT_ACCESS_FIELD(BPF_LDX_MEM, optval_end);
+		break;
+	}
+	return insn - insn_buf;
+}
+
 static const struct bpf_verifier_ops sk_filter_ops = {
 	.get_func_proto		= sk_filter_func_proto,
 	.is_valid_access	= sk_filter_is_valid_access,
@@ -3292,6 +3408,17 @@ static const struct bpf_verifier_ops cg_sock_addr_verifier_ops = {
 	.get_func_proto = sock_addr_func_proto,
 	.is_valid_access = sock_addr_is_valid_access,
 	.convert_ctx_access = sock_addr_convert_ctx_access,
+};
+
+static const struct bpf_verifier_ops cg_sockopt_ops = {
+	.get_func_proto = cg_sockopt_func_proto,
+	.is_valid_access = cg_sockopt_is_valid_access,
+	.convert_ctx_access = cg_sockopt_convert_ctx_access,
+};
+
+static struct bpf_prog_type_list cg_sockopt_type __read_mostly = {
+	.ops = &cg_sockopt_ops,
+	.type = BPF_PROG_TYPE_CGROUP_SOCKOPT,
 };
 
 static struct bpf_prog_type_list sk_filter_type __read_mostly = {
@@ -3332,6 +3459,7 @@ static int __init register_sk_filter_ops(void)
 	bpf_register_prog_type(&cg_skb_type);
 	bpf_register_prog_type(&cg_sock_type);
 	bpf_register_prog_type(&cg_sock_addr_type);
+	bpf_register_prog_type(&cg_sockopt_type);
 
 	return 0;
 }

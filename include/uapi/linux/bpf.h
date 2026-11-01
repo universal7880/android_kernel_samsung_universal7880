@@ -125,6 +125,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_CGROUP_SKB = 8,
 	BPF_PROG_TYPE_CGROUP_SOCK,
 	BPF_PROG_TYPE_CGROUP_SOCK_ADDR = 18,
+	BPF_PROG_TYPE_CGROUP_SOCKOPT = 25,
 };
 
 /* If BPF_F_STRICT_ALIGNMENT is used in BPF_PROG_LOAD command, the
@@ -145,6 +146,8 @@ enum bpf_attach_type {
 	BPF_CGROUP_UDP6_SENDMSG,
 	BPF_CGROUP_UDP4_RECVMSG = 19,
 	BPF_CGROUP_UDP6_RECVMSG,
+	BPF_CGROUP_GETSOCKOPT = 21,
+	BPF_CGROUP_SETSOCKOPT,
 	__MAX_BPF_ATTACH_TYPE,
 };
 
@@ -761,5 +764,14 @@ struct bpf_sock_addr {
 				 */
 };
 
+struct bpf_sockopt {
+	__bpf_md_ptr(struct bpf_sock *, sk);
+	__bpf_md_ptr(void *, optval);
+	__bpf_md_ptr(void *, optval_end);
+	__s32	level;
+	__s32	optname;
+	__s32	optlen;
+	__s32	retval;
+};
 
 #endif /* _UAPI__LINUX_BPF_H__ */

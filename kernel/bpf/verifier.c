@@ -857,6 +857,8 @@ static bool may_access_direct_pkt_data(struct bpf_verifier_env *env,
 
 		env->seen_direct_write = true;
 		return true;
+	case BPF_PROG_TYPE_CGROUP_SOCKOPT:
+		return meta ? meta->pkt_access : true;
 	default:
 		return false;
 	}
@@ -1024,6 +1026,10 @@ static int check_ptr_alignment(struct bpf_verifier_env *env,
 
 	switch (reg->type) {
 	case PTR_TO_PACKET:
+		/* Sockopt buffers are kmalloc-aligned, unlike packet L3 data. */
+		if (env->prog->type == BPF_PROG_TYPE_CGROUP_SOCKOPT)
+			return check_generic_ptr_alignment(reg, "sockopt ", off,
+						   size, strict);
 		/* special case, because of NET_IP_ALIGN */
 		return check_pkt_ptr_alignment(reg, off, size, strict);
 	case PTR_TO_MAP_VALUE:
@@ -3773,6 +3779,19 @@ static bool reg_type_mismatch(enum bpf_reg_type src, enum bpf_reg_type prev)
 			       !reg_type_mismatch_ok(prev));
 }
 
+static int check_return_code(struct bpf_verifier_env *env)
+{
+	struct bpf_reg_state *reg = &env->cur_state.regs[BPF_REG_0];
+
+	if (env->prog->type != BPF_PROG_TYPE_CGROUP_SOCKOPT)
+		return 0;
+	if (reg->type != SCALAR_VALUE || reg->umax_value > 1) {
+		verbose("sockopt programs must return 0 or 1\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static int do_check(struct bpf_verifier_env *env)
 {
 	struct bpf_verifier_state *state = &env->cur_state;
@@ -4011,6 +4030,10 @@ static int do_check(struct bpf_verifier_env *env)
 					verbose("R0 leaks addr as return value\n");
 					return -EACCES;
 				}
+
+				err = check_return_code(env);
+				if (err)
+					return err;
 
 process_bpf_exit:
 				insn_idx = pop_stack(env, &prev_insn_idx);
