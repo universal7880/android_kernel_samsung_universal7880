@@ -352,6 +352,17 @@ int simple_rename(struct inode *old_dir, struct dentry *old_dentry,
 }
 EXPORT_SYMBOL(simple_rename);
 
+int simple_rename2(struct inode *old_dir, struct dentry *old_dentry,
+		   struct inode *new_dir, struct dentry *new_dentry,
+		   unsigned int flags)
+{
+	if (flags & ~RENAME_NOREPLACE)
+		return -EINVAL;
+
+	return simple_rename(old_dir, old_dentry, new_dir, new_dentry);
+}
+EXPORT_SYMBOL(simple_rename2);
+
 /**
  * simple_setattr - setattr for simple filesystem
  * @dentry: dentry

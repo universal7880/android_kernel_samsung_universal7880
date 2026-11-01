@@ -205,7 +205,7 @@ static const struct inode_operations bpf_dir_iops = {
 	.mknod		= bpf_mkobj,
 	.mkdir		= bpf_mkdir,
 	.rmdir		= simple_rmdir,
-	.rename		= simple_rename,
+	.rename2	= simple_rename2,
 	.link		= simple_link,
 	.unlink		= simple_unlink,
 };
