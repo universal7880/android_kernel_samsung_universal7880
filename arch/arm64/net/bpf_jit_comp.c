@@ -31,6 +31,7 @@
 
 #define TMP_REG_1 (MAX_BPF_JIT_REG + 0)
 #define TMP_REG_2 (MAX_BPF_JIT_REG + 1)
+#define TCALL_CNT (MAX_BPF_JIT_REG + 2)
 
 /* Map BPF registers to A64 registers */
 static const int bpf2a64[] = {
@@ -54,13 +55,15 @@ static const int bpf2a64[] = {
 	/* temporary register for internal BPF JIT */
 	[TMP_REG_1] = A64_R(23),
 	[TMP_REG_2] = A64_R(24),
+	/* Tail-call depth survives calls into the kernel. */
+	[TCALL_CNT] = A64_R(26),
 };
 
 struct jit_ctx {
 	const struct bpf_prog *prog;
 	int idx;
-	int tmp_used;
 	int epilogue_offset;
+	int tail_call_out_offset;
 	int *offset;
 	u32 *image;
 };
@@ -145,6 +148,9 @@ static inline int epilogue_offset(const struct jit_ctx *ctx)
 
 #define STACK_SIZE STACK_ALIGN(_STACK_SIZE)
 
+/* Every tail-call target shares the same saved registers and BPF stack. */
+#define PROLOGUE_OFFSET 9
+
 static void build_prologue(struct jit_ctx *ctx)
 {
 	const u8 r6 = bpf2a64[BPF_REG_6];
@@ -187,14 +193,16 @@ static void build_prologue(struct jit_ctx *ctx)
 	/* Save callee-saved register */
 	emit(A64_PUSH(r6, r7, A64_SP), ctx);
 	emit(A64_PUSH(r8, r9, A64_SP), ctx);
-	if (ctx->tmp_used)
-		emit(A64_PUSH(tmp1, tmp2, A64_SP), ctx);
+	emit(A64_PUSH(tmp1, tmp2, A64_SP), ctx);
 
 	/* Save fp (x25) and x26. SP requires 16 bytes alignment */
 	emit(A64_PUSH(fp, A64_R(26), A64_SP), ctx);
 
 	/* Set up BPF prog stack base register (x25) */
 	emit(A64_MOV(1, fp, A64_SP), ctx);
+
+	/* Initialize the tail-call depth only on initial entry. */
+	emit(A64_MOVZ(1, bpf2a64[TCALL_CNT], 0, 0), ctx);
 
 	/* Set up function call stack */
 	emit(A64_SUB_I(1, A64_SP, A64_SP, STACK_SIZE), ctx);
@@ -218,8 +226,7 @@ static void build_epilogue(struct jit_ctx *ctx)
 	emit(A64_POP(fp, A64_R(26), A64_SP), ctx);
 
 	/* Restore callee-saved register */
-	if (ctx->tmp_used)
-		emit(A64_POP(tmp1, tmp2, A64_SP), ctx);
+	emit(A64_POP(tmp1, tmp2, A64_SP), ctx);
 	emit(A64_POP(r8, r9, A64_SP), ctx);
 	emit(A64_POP(r6, r7, A64_SP), ctx);
 
@@ -230,6 +237,49 @@ static void build_epilogue(struct jit_ctx *ctx)
 	emit(A64_MOV(1, A64_R(0), r0), ctx);
 
 	emit(A64_RET(A64_LR), ctx);
+}
+
+static int emit_bpf_tail_call(struct jit_ctx *ctx)
+{
+	const u8 array = bpf2a64[BPF_REG_2];
+	const u8 index = bpf2a64[TMP_REG_1];
+	const u8 tmp = bpf2a64[TMP_REG_2];
+	const u8 tcc = bpf2a64[TCALL_CNT];
+	const int start = ctx->idx;
+	int out_offset = ctx->tail_call_out_offset;
+
+#define tail_out (out_offset - (ctx->idx - start))
+	/* Program arrays use a 32-bit index, including for pointer scaling. */
+	emit(A64_MOV(0, index, bpf2a64[BPF_REG_3]), ctx);
+	emit_a64_mov_i64(tmp, offsetof(struct bpf_array, map.max_entries), ctx);
+	emit(A64_LDR32(tmp, array, tmp), ctx);
+	emit(A64_CMP(0, index, tmp), ctx);
+	emit(A64_B_(A64_COND_CS, tail_out), ctx);
+
+	emit_a64_mov_i64(tmp, MAX_TAIL_CALL_CNT, ctx);
+	emit(A64_CMP(1, tcc, tmp), ctx);
+	emit(A64_B_(A64_COND_HI, tail_out), ctx);
+	emit(A64_ADD_I(1, tcc, tcc, 1), ctx);
+
+	/* ptrs is an inline array, not a pointer stored in the map. */
+	emit(A64_LSL(1, index, index, 3), ctx);
+	emit_a64_mov_i64(tmp, offsetof(struct bpf_array, ptrs), ctx);
+	emit(A64_ADD(1, tmp, array, tmp), ctx);
+	emit(A64_LDR64(tmp, tmp, index), ctx);
+	emit(A64_CBZ(1, tmp, tail_out), ctx);
+
+	emit_a64_mov_i64(index, offsetof(struct bpf_prog, bpf_func), ctx);
+	emit(A64_LDR64(index, tmp, index), ctx);
+	emit(A64_ADD_I(1, index, index, sizeof(u32) * PROLOGUE_OFFSET), ctx);
+	emit(A64_BR(index), ctx);
+#undef tail_out
+
+	/* The fake pass records the local exit before code is allocated.
+	 * Keep this per compilation, not in shared static state.
+	 */
+	if (!ctx->tail_call_out_offset)
+		ctx->tail_call_out_offset = ctx->idx - start;
+	return ctx->tail_call_out_offset == ctx->idx - start ? 0 : -EINVAL;
 }
 
 /* JITs an eBPF instruction.
@@ -318,7 +368,6 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 			emit(A64_UDIV(is64, dst, dst, src), ctx);
 			break;
 		case BPF_MOD:
-			ctx->tmp_used = 1;
 			emit(A64_UDIV(is64, tmp, dst, src), ctx);
 			emit(A64_MUL(is64, tmp, tmp, src), ctx);
 			emit(A64_SUB(is64, dst, dst, tmp), ctx);
@@ -391,49 +440,41 @@ emit_bswap_uxt:
 	/* dst = dst OP imm */
 	case BPF_ALU | BPF_ADD | BPF_K:
 	case BPF_ALU64 | BPF_ADD | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_ADD(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_SUB | BPF_K:
 	case BPF_ALU64 | BPF_SUB | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_SUB(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_AND | BPF_K:
 	case BPF_ALU64 | BPF_AND | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_AND(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_OR | BPF_K:
 	case BPF_ALU64 | BPF_OR | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_ORR(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_XOR | BPF_K:
 	case BPF_ALU64 | BPF_XOR | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_EOR(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_MUL | BPF_K:
 	case BPF_ALU64 | BPF_MUL | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_MUL(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_DIV | BPF_K:
 	case BPF_ALU64 | BPF_DIV | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp, imm, ctx);
 		emit(A64_UDIV(is64, dst, dst, tmp), ctx);
 		break;
 	case BPF_ALU | BPF_MOD | BPF_K:
 	case BPF_ALU64 | BPF_MOD | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(is64, tmp2, imm, ctx);
 		emit(A64_UDIV(is64, tmp, dst, tmp2), ctx);
 		emit(A64_MUL(is64, tmp, tmp, tmp2), ctx);
@@ -524,12 +565,10 @@ emit_cond_jmp:
 	case BPF_JMP | BPF_JSLT | BPF_K:
 	case BPF_JMP | BPF_JSGE | BPF_K:
 	case BPF_JMP | BPF_JSLE | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(1, tmp, imm, ctx);
 		emit(A64_CMP(1, dst, tmp), ctx);
 		goto emit_cond_jmp;
 	case BPF_JMP | BPF_JSET | BPF_K:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(1, tmp, imm, ctx);
 		emit(A64_TST(1, dst, tmp), ctx);
 		goto emit_cond_jmp;
@@ -538,8 +577,6 @@ emit_cond_jmp:
 	{
 		const u8 r0 = bpf2a64[BPF_REG_0];
 		const u64 func = (u64)__bpf_call_base + imm;
-
-		ctx->tmp_used = 1;
 		emit_a64_mov_i64(tmp, func, ctx);
 		emit(A64_PUSH(A64_FP, A64_LR, A64_SP), ctx);
 		emit(A64_MOV(1, A64_FP, A64_SP), ctx);
@@ -548,6 +585,9 @@ emit_cond_jmp:
 		emit(A64_POP(A64_FP, A64_LR, A64_SP), ctx);
 		break;
 	}
+	case BPF_JMP | BPF_TAIL_CALL:
+		return emit_bpf_tail_call(ctx);
+
 	/* function return */
 	case BPF_JMP | BPF_EXIT:
 		/* Optimization: when last instruction is EXIT,
@@ -585,7 +625,6 @@ emit_cond_jmp:
 	case BPF_LDX | BPF_MEM | BPF_H:
 	case BPF_LDX | BPF_MEM | BPF_B:
 	case BPF_LDX | BPF_MEM | BPF_DW:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(1, tmp, off, ctx);
 		switch (BPF_SIZE(code)) {
 		case BPF_W:
@@ -609,7 +648,6 @@ emit_cond_jmp:
 	case BPF_ST | BPF_MEM | BPF_B:
 	case BPF_ST | BPF_MEM | BPF_DW:
 		/* Load imm to a register then store it */
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(1, tmp2, off, ctx);
 		emit_a64_mov_i(1, tmp, imm, ctx);
 		switch (BPF_SIZE(code)) {
@@ -633,7 +671,6 @@ emit_cond_jmp:
 	case BPF_STX | BPF_MEM | BPF_H:
 	case BPF_STX | BPF_MEM | BPF_B:
 	case BPF_STX | BPF_MEM | BPF_DW:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(1, tmp, off, ctx);
 		switch (BPF_SIZE(code)) {
 		case BPF_W:
@@ -654,7 +691,6 @@ emit_cond_jmp:
 	case BPF_STX | BPF_XADD | BPF_W:
 	/* STX XADD: lock *(u64 *)(dst + off) += src */
 	case BPF_STX | BPF_XADD | BPF_DW:
-		ctx->tmp_used = 1;
 		emit_a64_mov_i(1, tmp, off, ctx);
 		emit(A64_ADD(1, tmp, tmp, dst), ctx);
 		emit(A64_PRFM(tmp, PST, L1, STRM), ctx);
@@ -794,7 +830,7 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 
 	/* 1. Initial fake pass to compute ctx->idx. */
 
-	/* Fake pass to fill in ctx->offset and ctx->tmp_used. */
+	/* Fake pass to fill in instruction and tail-call offsets. */
 	if (build_body(&ctx))
 		goto out;
 
@@ -816,6 +852,10 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	ctx.idx = 0;
 
 	build_prologue(&ctx);
+	if (ctx.idx != PROLOGUE_OFFSET) {
+		bpf_jit_binary_free(header);
+		goto out;
+	}
 
 	if (build_body(&ctx)) {
 		bpf_jit_binary_free(header);
