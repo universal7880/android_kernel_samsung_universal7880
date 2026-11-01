@@ -3448,6 +3448,7 @@ static struct bpf_prog *bpf_patch_insn_data(struct bpf_verifier_env *env, u32 of
 	new_prog = bpf_patch_insn_single(env->prog, off, patch, len);
 	if (!new_prog)
 		return NULL;
+	env->prog = new_prog;
 	if (adjust_insn_aux_data(env, new_prog->len, off, len))
 		return NULL;
 	return new_prog;
