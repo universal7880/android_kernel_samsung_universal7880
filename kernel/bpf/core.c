@@ -773,11 +773,27 @@ select_insn:
 	ALU(SUB,  -)
 	ALU(AND,  &)
 	ALU(OR,   |)
-	ALU(LSH, <<)
-	ALU(RSH, >>)
 	ALU(XOR,  ^)
 	ALU(MUL,  *)
 #undef ALU
+
+#define SHIFT(OPCODE, OP) \
+	ALU64_##OPCODE##_X: \
+		DST = DST OP (SRC & 63); \
+		CONT; \
+	ALU_##OPCODE##_X: \
+		DST = (u32) DST OP (SRC & 31); \
+		CONT; \
+	ALU64_##OPCODE##_K: \
+		DST = DST OP IMM; \
+		CONT; \
+	ALU_##OPCODE##_K: \
+		DST = (u32) DST OP IMM; \
+		CONT;
+
+	SHIFT(LSH, <<)
+	SHIFT(RSH, >>)
+#undef SHIFT
 	ALU_NEG:
 		DST = (u32) -DST;
 		CONT;
@@ -807,10 +823,10 @@ select_insn:
 		DST = (u32) ((s32) DST >> IMM);
 		CONT;
 	ALU64_ARSH_X:
-		(*(s64 *) &DST) >>= SRC;
+		DST = (s64) DST >> (SRC & 63);
 		CONT;
 	ALU64_ARSH_K:
-		(*(s64 *) &DST) >>= IMM;
+		DST = (s64) DST >> IMM;
 		CONT;
 	ALU64_MOD_X:
 		if (unlikely(SRC == 0))
