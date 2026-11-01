@@ -1672,7 +1672,7 @@ bool is_skb_forwardable(struct net_device *dev, struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(is_skb_forwardable);
 
-int __dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
+int ____dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
 {
 	if (skb_shinfo(skb)->tx_flags & SKBTX_DEV_ZEROCOPY) {
 		if (skb_copy_ubufs(skb, GFP_ATOMIC)) {
@@ -1689,9 +1689,19 @@ int __dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
 	}
 
 	skb_scrub_packet(skb, true);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(____dev_forward_skb);
+
+int __dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
+{
+	int ret = ____dev_forward_skb(dev, skb);
+
+	if (ret)
+		return ret;
+
 	skb->protocol = eth_type_trans(skb, dev);
 	skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(__dev_forward_skb);
