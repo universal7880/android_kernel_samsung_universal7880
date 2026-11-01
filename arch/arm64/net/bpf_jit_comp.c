@@ -803,6 +803,20 @@ static int build_body(struct jit_ctx *ctx)
 	return 0;
 }
 
+static int validate_code(struct jit_ctx *ctx)
+{
+	int i;
+
+	for (i = 0; i < ctx->idx; i++) {
+		u32 a64_insn = le32_to_cpu(ctx->image[i]);
+
+		if (a64_insn == AARCH64_BREAK_FAULT)
+			return -1;
+	}
+
+	return 0;
+}
+
 static inline void bpf_flush_icache(void *start, void *end)
 {
 	flush_icache_range((unsigned long)start, (unsigned long)end);
@@ -863,6 +877,12 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	}
 
 	build_epilogue(&ctx);
+
+	/* Reject encoder failures and unfilled instruction slots. */
+	if (validate_code(&ctx)) {
+		bpf_jit_binary_free(header);
+		goto out;
+	}
 
 	/* And we're done. */
 	if (bpf_jit_enable > 1)
