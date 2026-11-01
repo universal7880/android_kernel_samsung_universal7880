@@ -2148,7 +2148,11 @@ static u64 bpf_skb_change_head(u64 r1, u64 r2, u64 flags, u64 r4, u64 r5)
 	u32 new_len = skb->len + head_room;
 	int ret;
 
-	if (unlikely(flags || (!skb_is_gso(skb) && new_len > max_len) ||
+	/* GSO may exceed the MTU, but head growth must still fit the
+	 * skb allocator and its signed expansion arguments.
+	 */
+	if (unlikely(flags || head_room > SKB_MAX_ALLOC ||
+		     (!skb_is_gso(skb) && new_len > max_len) ||
 		     new_len < skb->len))
 		return -EINVAL;
 
