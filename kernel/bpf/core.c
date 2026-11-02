@@ -1237,6 +1237,20 @@ struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)
 }
 EXPORT_SYMBOL_GPL(bpf_prog_select_runtime);
 
+static unsigned int __bpf_prog_ret1(const void *ctx,
+				    const struct bpf_insn *insn)
+{
+	return 1;
+}
+
+static struct bpf_prog_dummy {
+	struct bpf_prog prog;
+} dummy_bpf_prog = {
+	.prog = {
+		.bpf_func = __bpf_prog_ret1,
+	},
+};
+
 /* to avoid allocating empty bpf_prog_array for cgroups that
  * don't have bpf program attached use one global 'empty_prog_array'
  * It will not be modified the caller of bpf_prog_array_alloc()
@@ -1252,9 +1266,14 @@ static struct {
 
 struct bpf_prog_array *bpf_prog_array_alloc(u32 prog_cnt, gfp_t flags)
 {
+	size_t max_count = (SIZE_MAX - sizeof(struct bpf_prog_array)) /
+			   sizeof(struct bpf_prog *) - 1;
+
+	if (prog_cnt > max_count)
+		return NULL;
 	if (prog_cnt)
 		return kzalloc(sizeof(struct bpf_prog_array) +
-			       sizeof(struct bpf_prog *) * (prog_cnt + 1),
+			       sizeof(struct bpf_prog *) * ((size_t)prog_cnt + 1),
 			       flags);
 
 	return &empty_prog_array.hdr;
@@ -1270,19 +1289,28 @@ void bpf_prog_array_free(struct bpf_prog_array __rcu *progs)
 
 bool bpf_prog_array_is_empty(struct bpf_prog_array *array)
 {
-	/* Effective arrays are immutable until replaced under RCU. */
-	return !array || !READ_ONCE(array->progs[0]);
+	struct bpf_prog **slot, *prog;
+
+	if (!array)
+		return true;
+	for (slot = array->progs; (prog = READ_ONCE(*slot)); slot++)
+		if (prog != &dummy_bpf_prog.prog)
+			return false;
+	return true;
 }
 
 int bpf_prog_array_length(struct bpf_prog_array __rcu *progs)
 {
-	struct bpf_prog **prog;
+	struct bpf_prog_array *array;
+	struct bpf_prog **slot, *prog;
 	u32 cnt = 0;
 
 	rcu_read_lock();
-	prog = rcu_dereference(progs)->progs;
-	for (; *prog; prog++)
-		cnt++;
+	array = rcu_dereference(progs);
+	if (array)
+		for (slot = array->progs; (prog = READ_ONCE(*slot)); slot++)
+			if (prog != &dummy_bpf_prog.prog)
+				cnt++;
 	rcu_read_unlock();
 	return cnt;
 }
@@ -1290,26 +1318,108 @@ int bpf_prog_array_length(struct bpf_prog_array __rcu *progs)
 int bpf_prog_array_copy_to_user(struct bpf_prog_array __rcu *progs,
 			      __u32 __user *prog_ids, u32 cnt)
 {
-	struct bpf_prog **prog;
+	struct bpf_prog_array *array;
+	struct bpf_prog **slot, *prog;
 	u32 i = 0, id;
 	int ret = 0;
 
 	rcu_read_lock();
-	prog = rcu_dereference(progs)->progs;
-	for (; *prog && i < cnt; prog++, i++) {
-		id = (*prog)->aux->id;
+	array = rcu_dereference(progs);
+	if (!array)
+		goto out;
+	for (slot = array->progs; (prog = READ_ONCE(*slot)); slot++) {
+		if (prog == &dummy_bpf_prog.prog)
+			continue;
+		if (i == cnt) {
+			ret = -ENOSPC;
+			goto out;
+		}
+		id = prog->aux->id;
 		if (copy_to_user(prog_ids + i, &id, sizeof(id))) {
 			ret = -EFAULT;
 			goto out;
 		}
+		i++;
 	}
-	if (*prog)
-		ret = -ENOSPC;
 out:
 	rcu_read_unlock();
 	return ret;
 }
 
+
+void bpf_prog_array_delete_safe(struct bpf_prog_array __rcu *progs,
+				struct bpf_prog *old_prog)
+{
+	struct bpf_prog **prog;
+
+	if (!progs)
+		return;
+	prog = progs->progs;
+
+	for (; *prog; prog++)
+		if (READ_ONCE(*prog) == old_prog) {
+			WRITE_ONCE(*prog, &dummy_bpf_prog.prog);
+			break;
+		}
+}
+
+int bpf_prog_array_copy(struct bpf_prog_array __rcu *old_array,
+			struct bpf_prog *exclude_prog,
+			struct bpf_prog *include_prog,
+			struct bpf_prog_array **new_array)
+{
+	u32 new_prog_cnt, carry_prog_cnt = 0;
+	struct bpf_prog **existing_prog;
+	struct bpf_prog_array *array;
+	u32 new_prog_idx = 0;
+
+	/* Figure out how many existing progs we need to carry over to
+	 * the new array.
+	 */
+	if (old_array) {
+		existing_prog = old_array->progs;
+		for (; *existing_prog; existing_prog++) {
+			if (*existing_prog != exclude_prog &&
+			    *existing_prog != &dummy_bpf_prog.prog) {
+				if (carry_prog_cnt == U32_MAX - 1)
+					return -E2BIG;
+				carry_prog_cnt++;
+			}
+			if (*existing_prog == include_prog)
+				return -EEXIST;
+		}
+	}
+
+	/* How many progs (not NULL) will be in the new array? */
+	new_prog_cnt = carry_prog_cnt;
+	if (include_prog)
+		new_prog_cnt += 1;
+
+	/* Do we have any prog (not NULL) in the new array? */
+	if (!new_prog_cnt) {
+		*new_array = NULL;
+		return 0;
+	}
+
+	/* The allocator includes the terminating NULL slot. */
+	array = bpf_prog_array_alloc(new_prog_cnt, GFP_KERNEL);
+	if (!array)
+		return -ENOMEM;
+
+	/* Fill in the new prog array */
+	if (carry_prog_cnt) {
+		existing_prog = old_array->progs;
+		for (; *existing_prog; existing_prog++)
+			if (*existing_prog != exclude_prog &&
+			    *existing_prog != &dummy_bpf_prog.prog)
+				array->progs[new_prog_idx++] = *existing_prog;
+	}
+	if (include_prog)
+		array->progs[new_prog_idx++] = include_prog;
+	array->progs[new_prog_idx] = NULL;
+	*new_array = array;
+	return 0;
+}
 
 static void bpf_prog_free_deferred(struct work_struct *work)
 {
