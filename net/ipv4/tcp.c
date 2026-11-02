@@ -2292,6 +2292,8 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tcp_set_ca_state(sk, TCP_CA_Open);
 	tcp_clear_retrans(tp);
 	tp->total_retrans = 0;
+	tp->bytes_acked = 0;
+	tp->bytes_received = 0;
 	inet_csk_delack_init(sk);
 	/* Initialize rcv_mss to TCP_MIN_MSS to avoid division by 0
 	* issue in __tcp_select_window()
@@ -2685,7 +2687,7 @@ EXPORT_SYMBOL(compat_tcp_setsockopt);
 #endif
 
 /* Return information about state of tcp endpoint in API format. */
-void tcp_get_info(const struct sock *sk, struct tcp_info *info)
+void tcp_get_info(struct sock *sk, struct tcp_info *info)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_connection_sock *icsk = inet_csk(sk);
@@ -2759,6 +2761,11 @@ void tcp_get_info(const struct sock *sk, struct tcp_info *info)
 	rate = READ_ONCE(sk->sk_max_pacing_rate);
 	rate64 = rate != ~0U ? rate : ~0ULL;
 	put_unaligned(rate64, &info->tcpi_max_pacing_rate);
+
+	spin_lock_bh(&sk->sk_lock.slock);
+	put_unaligned(tp->bytes_acked, &info->tcpi_bytes_acked);
+	put_unaligned(tp->bytes_received, &info->tcpi_bytes_received);
+	spin_unlock_bh(&sk->sk_lock.slock);
 }
 EXPORT_SYMBOL_GPL(tcp_get_info);
 
