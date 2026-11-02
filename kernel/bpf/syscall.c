@@ -1658,7 +1658,9 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 	union bpf_attr attr;
 	int err;
 
-	if (sysctl_unprivileged_bpf_disabled && !capable(CAP_SYS_ADMIN))
+	/* Existing objects remain subject to fd, bpffs and LSM permissions. */
+	if ((cmd == BPF_MAP_CREATE || cmd == BPF_PROG_LOAD) &&
+	    sysctl_unprivileged_bpf_disabled && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
 	if (!access_ok(VERIFY_READ, uattr, 1))
