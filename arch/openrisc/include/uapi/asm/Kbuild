@@ -8,3 +8,5 @@ header-y += param.h
 header-y += ptrace.h
 header-y += sigcontext.h
 header-y += unistd.h
+
+generic-y += bpf_perf_event.h

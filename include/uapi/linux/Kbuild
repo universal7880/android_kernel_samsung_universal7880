@@ -440,3 +440,4 @@ header-y += xfrm.h
 header-y += hw_breakpoint.h
 header-y += zorro.h
 header-y += zorro_ids.h
+header-y += bpf_perf_event.h

@@ -63,3 +63,5 @@ header-y += unistd.h
 header-y += vm86.h
 header-y += vmx.h
 header-y += vsyscall.h
+
+generic-y += bpf_perf_event.h

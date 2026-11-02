@@ -19,3 +19,5 @@ header-y += ucontext.h
 header-y += unistd.h
 
 generic-y += ucontext.h
+
+generic-y += bpf_perf_event.h

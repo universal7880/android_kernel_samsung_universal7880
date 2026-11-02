@@ -48,3 +48,5 @@ header-y += uctx.h
 header-y += unistd.h
 header-y += utrap.h
 header-y += watchdog.h
+
+generic-y += bpf_perf_event.h

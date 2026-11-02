@@ -47,3 +47,4 @@ header-y += $(foreach hdr,$(opt-header), \
 		), \
 		$(hdr) \
 		))
+header-y += bpf_perf_event.h

@@ -44,3 +44,5 @@ header-y += tm.h
 header-y += types.h
 header-y += ucontext.h
 header-y += unistd.h
+
+generic-y += bpf_perf_event.h

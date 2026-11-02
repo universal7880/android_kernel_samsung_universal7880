@@ -8,3 +8,5 @@ header-y += sigcontext.h
 header-y += unistd.h
 
 generic-y += kvm_para.h
+
+generic-y += bpf_perf_event.h

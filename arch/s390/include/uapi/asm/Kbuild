@@ -50,3 +50,5 @@ header-y += unistd.h
 header-y += virtio-ccw.h
 header-y += vtoc.h
 header-y += zcrypt.h
+
+generic-y += bpf_perf_event.h

@@ -12,3 +12,5 @@ header-y += unistd.h
 generic-y += mman.h
 generic-y += resource.h
 generic-y += setup.h
+
+generic-y += bpf_perf_event.h

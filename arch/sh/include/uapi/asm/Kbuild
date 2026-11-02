@@ -23,3 +23,5 @@ header-y += types.h
 header-y += unistd.h
 header-y += unistd_32.h
 header-y += unistd_64.h
+
+generic-y += bpf_perf_event.h

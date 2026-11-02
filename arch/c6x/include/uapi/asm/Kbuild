@@ -10,3 +10,5 @@ header-y += setup.h
 header-y += sigcontext.h
 header-y += swab.h
 header-y += unistd.h
+
+generic-y += bpf_perf_event.h

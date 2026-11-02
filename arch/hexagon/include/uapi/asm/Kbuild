@@ -13,3 +13,5 @@ header-y += signal.h
 header-y += swab.h
 header-y += unistd.h
 header-y += user.h
+
+generic-y += bpf_perf_event.h
