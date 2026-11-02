@@ -183,6 +183,7 @@ static u64 css_serial_nr_next = 1;
  */
 static int need_forkexit_callback __read_mostly;
 
+static struct file_system_type cgroup2_fs_type;
 static struct cftype cgroup_dfl_base_files[];
 static struct cftype cgroup_legacy_base_files[];
 
@@ -1679,10 +1680,11 @@ static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 			 int flags, const char *unused_dev_name,
 			 void *data)
 {
+	bool is_v2 = fs_type == &cgroup2_fs_type;
 	struct super_block *pinned_sb = NULL;
 	struct cgroup_subsys *ss;
 	struct cgroup_root *root;
-	struct cgroup_sb_opts opts;
+	struct cgroup_sb_opts opts = { };
 	struct dentry *dentry;
 	int ret;
 	int i;
@@ -1696,6 +1698,18 @@ static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 		cgroup_enable_task_cg_lists();
 
 	mutex_lock(&cgroup_mutex);
+
+	if (is_v2) {
+		if (data && *(char *)data) {
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+		cgrp_dfl_root_visible = true;
+		root = &cgrp_dfl_root;
+		cgroup_get(&root->cgrp);
+		ret = 0;
+		goto out_unlock;
+	}
 
 	/* First find the desired set of subsystems */
 	ret = parse_cgroupfs_options(data, &opts);
@@ -1823,7 +1837,8 @@ out_free:
 		return ERR_PTR(ret);
 
 	dentry = kernfs_mount(fs_type, flags, root->kf_root,
-				CGROUP_SUPER_MAGIC, &new_sb);
+			      is_v2 ? CGROUP2_SUPER_MAGIC : CGROUP_SUPER_MAGIC,
+			      &new_sb);
 	if (IS_ERR(dentry) || !new_sb)
 		cgroup_put(&root->cgrp);
 
@@ -1862,6 +1877,12 @@ static void cgroup_kill_sb(struct super_block *sb)
 
 static struct file_system_type cgroup_fs_type = {
 	.name = "cgroup",
+	.mount = cgroup_mount,
+	.kill_sb = cgroup_kill_sb,
+};
+
+static struct file_system_type cgroup2_fs_type = {
+	.name = "cgroup2",
 	.mount = cgroup_mount,
 	.kill_sb = cgroup_kill_sb,
 };
@@ -3987,7 +4008,8 @@ int cgroupstats_build(struct cgroupstats *stats, struct dentry *dentry)
 	struct task_struct *tsk;
 
 	/* it should be kernfs_node belonging to cgroupfs and is a directory */
-	if (dentry->d_sb->s_type != &cgroup_fs_type || !kn ||
+	if ((dentry->d_sb->s_type != &cgroup_fs_type &&
+	     dentry->d_sb->s_type != &cgroup2_fs_type) || !kn ||
 	    kernfs_type(kn) != KERNFS_DIR)
 		return -EINVAL;
 
@@ -4987,6 +5009,13 @@ int __init cgroup_init(void)
 		return err;
 	}
 
+	err = register_filesystem(&cgroup2_fs_type);
+	if (err < 0) {
+		unregister_filesystem(&cgroup_fs_type);
+		kobject_put(cgroup_kobj);
+		return err;
+	}
+
 	proc_create("cgroups", 0, NULL, &proc_cgroupstats_operations);
 	return 0;
 }
@@ -5353,7 +5382,8 @@ struct cgroup_subsys_state *css_tryget_online_from_dir(struct dentry *dentry,
 	struct cgroup *cgrp;
 
 	/* is @dentry a cgroup dir? */
-	if (dentry->d_sb->s_type != &cgroup_fs_type || !kn ||
+	if ((dentry->d_sb->s_type != &cgroup_fs_type &&
+	     dentry->d_sb->s_type != &cgroup2_fs_type) || !kn ||
 	    kernfs_type(kn) != KERNFS_DIR)
 		return ERR_PTR(-EBADF);
 
