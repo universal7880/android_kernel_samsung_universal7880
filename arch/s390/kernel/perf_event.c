@@ -223,7 +223,7 @@ static int __init service_level_perf_register(void)
 arch_initcall(service_level_perf_register);
 
 /* See also arch/s390/kernel/traps.c */
-static unsigned long __store_trace(struct perf_callchain_entry *entry,
+static unsigned long __store_trace(struct perf_callchain_entry_ctx *entry,
 				   unsigned long sp,
 				   unsigned long low, unsigned long high)
 {
@@ -259,7 +259,7 @@ static unsigned long __store_trace(struct perf_callchain_entry *entry,
 	}
 }
 
-void perf_callchain_kernel(struct perf_callchain_entry *entry,
+void perf_callchain_kernel(struct perf_callchain_entry_ctx *entry,
 			   struct pt_regs *regs)
 {
 	unsigned long head;

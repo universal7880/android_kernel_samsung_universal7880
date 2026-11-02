@@ -1700,7 +1700,7 @@ static int __init init_hw_perf_events(void)
 }
 pure_initcall(init_hw_perf_events);
 
-void perf_callchain_kernel(struct perf_callchain_entry *entry,
+void perf_callchain_kernel(struct perf_callchain_entry_ctx *entry,
 			   struct pt_regs *regs)
 {
 	unsigned long ksp, fp;
@@ -1745,10 +1745,10 @@ void perf_callchain_kernel(struct perf_callchain_entry *entry,
 			}
 		}
 #endif
-	} while (entry->nr < sysctl_perf_event_max_stack);
+	} while (entry->entry->nr < entry->max_stack);
 }
 
-static void perf_callchain_user_64(struct perf_callchain_entry *entry,
+static void perf_callchain_user_64(struct perf_callchain_entry_ctx *entry,
 				   struct pt_regs *regs)
 {
 	unsigned long ufp;
@@ -1766,10 +1766,10 @@ static void perf_callchain_user_64(struct perf_callchain_entry *entry,
 		pc = sf.callers_pc;
 		ufp = (unsigned long)sf.fp + STACK_BIAS;
 		perf_callchain_store(entry, pc);
-	} while (entry->nr < sysctl_perf_event_max_stack);
+	} while (entry->entry->nr < entry->max_stack);
 }
 
-static void perf_callchain_user_32(struct perf_callchain_entry *entry,
+static void perf_callchain_user_32(struct perf_callchain_entry_ctx *entry,
 				   struct pt_regs *regs)
 {
 	unsigned long ufp;
@@ -1798,11 +1798,11 @@ static void perf_callchain_user_32(struct perf_callchain_entry *entry,
 			ufp = (unsigned long)sf.fp;
 		}
 		perf_callchain_store(entry, pc);
-	} while (entry->nr < sysctl_perf_event_max_stack);
+	} while (entry->entry->nr < entry->max_stack);
 }
 
 void
-perf_callchain_user(struct perf_callchain_entry *entry, struct pt_regs *regs)
+perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs)
 {
 	perf_callchain_store(entry, regs->tpc);
 

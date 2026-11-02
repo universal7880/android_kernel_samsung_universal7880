@@ -1952,7 +1952,7 @@ static int backtrace_stack(void *data, char *name)
 
 static int backtrace_address(void *data, unsigned long addr, int reliable)
 {
-	struct perf_callchain_entry *entry = data;
+	struct perf_callchain_entry_ctx *entry = data;
 
 	return perf_callchain_store(entry, addr);
 }
@@ -1964,7 +1964,7 @@ static const struct stacktrace_ops backtrace_ops = {
 };
 
 void
-perf_callchain_kernel(struct perf_callchain_entry *entry, struct pt_regs *regs)
+perf_callchain_kernel(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs)
 {
 	if (perf_guest_cbs && perf_guest_cbs->is_in_guest()) {
 		/* TODO: We don't support guest os callchain now */
@@ -2014,7 +2014,7 @@ static unsigned long get_segment_base(unsigned int segment)
 #include <asm/compat.h>
 
 static inline int
-perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry *entry)
+perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry_ctx *entry)
 {
 	/* 32-bit process in 64-bit kernel. */
 	unsigned long ss_base, cs_base;
@@ -2028,7 +2028,7 @@ perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry *entry)
 	ss_base = get_segment_base(regs->ss);
 
 	fp = compat_ptr(ss_base + regs->bp);
-	while (entry->nr < PERF_MAX_STACK_DEPTH) {
+	while (entry->entry->nr < entry->max_stack) {
 		unsigned long bytes;
 		frame.next_frame     = 0;
 		frame.return_address = 0;
@@ -2047,14 +2047,14 @@ perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry *entry)
 }
 #else
 static inline int
-perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry *entry)
+perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry_ctx *entry)
 {
     return 0;
 }
 #endif
 
 void
-perf_callchain_user(struct perf_callchain_entry *entry, struct pt_regs *regs)
+perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs)
 {
 	struct stack_frame frame;
 	const void __user *fp;
@@ -2080,7 +2080,7 @@ perf_callchain_user(struct perf_callchain_entry *entry, struct pt_regs *regs)
 	if (perf_callchain_user32(regs, entry))
 		return;
 
-	while (entry->nr < PERF_MAX_STACK_DEPTH) {
+	while (entry->entry->nr < entry->max_stack) {
 		unsigned long bytes;
 		frame.next_frame	     = NULL;
 		frame.return_address = 0;
