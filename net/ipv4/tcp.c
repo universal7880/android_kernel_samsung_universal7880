@@ -2294,6 +2294,10 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->total_retrans = 0;
 	tp->bytes_acked = 0;
 	tp->bytes_received = 0;
+	tp->segs_in = 0;
+	tp->segs_out = 0;
+	tp->data_segs_in = 0;
+	tp->data_segs_out = 0;
 	inet_csk_delack_init(sk);
 	/* Initialize rcv_mss to TCP_MIN_MSS to avoid division by 0
 	* issue in __tcp_select_window()
@@ -2765,6 +2769,8 @@ void tcp_get_info(struct sock *sk, struct tcp_info *info)
 	spin_lock_bh(&sk->sk_lock.slock);
 	put_unaligned(tp->bytes_acked, &info->tcpi_bytes_acked);
 	put_unaligned(tp->bytes_received, &info->tcpi_bytes_received);
+	info->tcpi_segs_out = tp->segs_out;
+	info->tcpi_segs_in = tp->segs_in;
 	spin_unlock_bh(&sk->sk_lock.slock);
 }
 EXPORT_SYMBOL_GPL(tcp_get_info);

@@ -205,6 +205,9 @@ static bool tcp_fastopen_create_child(struct sock *sk,
 
 		if (likely(skb2)) {
 			skb_dst_drop(skb2);
+			/* The SYN was counted when the child was created. */
+			tp->segs_in = 0;
+			tcp_segs_in(tp, skb2);
 			__skb_pull(skb2, tcp_hdrlen(skb));
 			skb_set_owner_r(skb2, child);
 			__skb_queue_tail(&child->sk_receive_queue, skb2);
