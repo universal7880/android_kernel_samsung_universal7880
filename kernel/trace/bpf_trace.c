@@ -15,9 +15,15 @@
 #include <linux/ctype.h>
 #include "trace.h"
 
+static u32 trace_run_bpf(struct bpf_prog *prog, void *ctx)
+{
+	return !!BPF_PROG_RUN(prog, ctx);
+}
+
+
 /**
  * trace_call_bpf - invoke BPF program
- * @prog: BPF program
+ * @call: tracepoint event
  * @ctx: opaque context pointer
  *
  * kprobe handlers execute BPF programs via this helper.
@@ -29,7 +35,7 @@
  * 1 - store kprobe event into ring buffer
  * Other values are reserved and currently alias to 1
  */
-unsigned int trace_call_bpf(struct bpf_prog *prog, void *ctx)
+unsigned int trace_call_bpf(struct ftrace_event_call *call, void *ctx)
 {
 	unsigned int ret;
 
@@ -49,9 +55,7 @@ unsigned int trace_call_bpf(struct bpf_prog *prog, void *ctx)
 		goto out;
 	}
 
-	rcu_read_lock();
-	ret = BPF_PROG_RUN(prog, ctx);
-	rcu_read_unlock();
+	ret = BPF_PROG_RUN_ARRAY_CHECK(call->prog_array, ctx, trace_run_bpf);
 
  out:
 	__this_cpu_dec(bpf_prog_active);
@@ -505,6 +509,65 @@ static const struct bpf_verifier_ops perf_event_prog_ops = {
 	.is_valid_access	= pe_prog_is_valid_access,
 	.convert_ctx_access	= pe_prog_convert_ctx_access,
 };
+
+static DEFINE_MUTEX(bpf_event_mutex);
+
+int perf_event_attach_bpf_prog(struct perf_event *event,
+			       struct bpf_prog *prog)
+{
+	struct bpf_prog_array __rcu *old_array;
+	struct bpf_prog_array *new_array;
+	int ret = -EEXIST;
+
+	mutex_lock(&bpf_event_mutex);
+
+	if (event->prog)
+		goto out;
+
+	old_array = rcu_dereference_protected(event->tp_event->prog_array,
+					      lockdep_is_held(&bpf_event_mutex));
+	ret = bpf_prog_array_copy(old_array, NULL, prog, &new_array);
+	if (ret < 0)
+		goto out;
+
+	/* set the new array to event->tp_event and set event->prog */
+	event->prog = prog;
+	rcu_assign_pointer(event->tp_event->prog_array, new_array);
+	bpf_prog_array_free(old_array);
+
+out:
+	mutex_unlock(&bpf_event_mutex);
+	return ret;
+}
+
+void perf_event_detach_bpf_prog(struct perf_event *event)
+{
+	struct bpf_prog_array __rcu *old_array;
+	struct bpf_prog_array *new_array;
+	int ret;
+
+	mutex_lock(&bpf_event_mutex);
+
+	if (!event->prog)
+		goto out;
+
+	old_array = rcu_dereference_protected(event->tp_event->prog_array,
+					      lockdep_is_held(&bpf_event_mutex));
+
+	ret = bpf_prog_array_copy(old_array, event->prog, NULL, &new_array);
+	if (ret < 0) {
+		bpf_prog_array_delete_safe(old_array, event->prog);
+	} else {
+		rcu_assign_pointer(event->tp_event->prog_array, new_array);
+		bpf_prog_array_free(old_array);
+	}
+
+	bpf_prog_put(event->prog);
+	event->prog = NULL;
+
+out:
+	mutex_unlock(&bpf_event_mutex);
+}
 
 static struct bpf_prog_type_list perf_event_tl = {
 	.ops	= &perf_event_prog_ops,

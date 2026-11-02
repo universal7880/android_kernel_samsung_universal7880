@@ -292,7 +292,7 @@ struct ftrace_event_call {
 #ifdef CONFIG_PERF_EVENTS
 	int				perf_refcount;
 	struct hlist_head __percpu	*perf_events;
-	struct bpf_prog			*prog;
+	struct bpf_prog_array __rcu	*prog_array;
 
 	int	(*perf_perm)(struct ftrace_event_call *,
 			     struct perf_event *);
@@ -538,10 +538,19 @@ event_trigger_unlock_commit_regs(struct ftrace_event_file *file,
 		event_triggers_post_call(file, tt);
 }
 
-#ifdef CONFIG_BPF_SYSCALL
-unsigned int trace_call_bpf(struct bpf_prog *prog, void *ctx);
+static inline bool bpf_prog_array_valid(struct ftrace_event_call *call)
+{
+#if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_PERF_EVENTS)
+	return READ_ONCE(call->prog_array) != NULL;
 #else
-static inline unsigned int trace_call_bpf(struct bpf_prog *prog, void *ctx)
+	return false;
+#endif
+}
+
+#ifdef CONFIG_BPF_SYSCALL
+unsigned int trace_call_bpf(struct ftrace_event_call *call, void *ctx);
+#else
+static inline unsigned int trace_call_bpf(struct ftrace_event_call *call, void *ctx)
 {
 	return 1;
 }
@@ -600,6 +609,11 @@ extern int  ftrace_profile_set_filter(struct perf_event *event, int event_id,
 extern void ftrace_profile_free_filter(struct perf_event *event);
 extern void *perf_trace_buf_prepare(int size, unsigned short type,
 				    struct pt_regs **regs, int *rctxp);
+
+void perf_trace_run_bpf_submit(void *raw_data, int size, int rctx,
+			      struct ftrace_event_call *call, u64 addr,
+			      u64 count, struct pt_regs *regs,
+			      struct hlist_head *head, struct task_struct *task);
 
 static inline void
 perf_trace_buf_submit(void *raw_data, int size, int rctx, u64 addr,

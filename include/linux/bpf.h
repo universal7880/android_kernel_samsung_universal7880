@@ -280,6 +280,22 @@ int bpf_prog_array_copy(struct bpf_prog_array __rcu *old_array,
 			struct bpf_prog *include_prog,
 			struct bpf_prog_array **new_array);
 
+struct perf_event;
+#ifdef CONFIG_BPF_EVENTS
+int perf_event_attach_bpf_prog(struct perf_event *event, struct bpf_prog *prog);
+void perf_event_detach_bpf_prog(struct perf_event *event);
+#else
+static inline int perf_event_attach_bpf_prog(struct perf_event *event,
+					   struct bpf_prog *prog)
+{
+	return -EOPNOTSUPP;
+}
+static inline void perf_event_detach_bpf_prog(struct perf_event *event)
+{
+}
+#endif
+
+
 #define __BPF_PROG_RUN_ARRAY(array, ctx, func, check_non_null)	\
 	({						\
 		__label__ _out;				\
@@ -304,6 +320,7 @@ _out:							\
 	__BPF_PROG_RUN_ARRAY(array, ctx, func, false)
 #define BPF_PROG_RUN_ARRAY_CHECK(array, ctx, func) \
 	__BPF_PROG_RUN_ARRAY(array, ctx, func, true)
+
 
 #ifdef CONFIG_BPF_SYSCALL
 DECLARE_PER_CPU(int, bpf_prog_active);
