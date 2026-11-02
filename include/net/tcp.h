@@ -277,6 +277,7 @@ extern int sysctl_tcp_early_retrans;
 extern int sysctl_tcp_limit_output_bytes;
 extern int sysctl_tcp_challenge_ack_limit;
 extern unsigned int sysctl_tcp_notsent_lowat;
+extern int sysctl_tcp_min_rtt_wlen;
 extern int sysctl_tcp_min_tso_segs;
 extern int sysctl_tcp_autocorking;
 extern int sysctl_tcp_default_init_rwnd;
@@ -1762,6 +1763,12 @@ static inline struct ip_options_rcu *tcp_v4_save_options(struct sk_buff *skb)
 		}
 	}
 	return dopt;
+}
+
+/* Minimum RTT in usec. ~0 means not available. */
+static inline u32 tcp_min_rtt(const struct tcp_sock *tp)
+{
+	return minmax_get(&tp->rtt_min);
 }
 
 static inline void tcp_segs_in(struct tcp_sock *tp, const struct sk_buff *skb)
