@@ -77,6 +77,14 @@ config EVENT_TRACING
 	select CONTEXT_SWITCH_TRACER
 	bool
 
+config BPF_EVENTS
+	bool
+	depends on BPF_SYSCALL && PERF_EVENTS && EVENT_TRACING
+	default y
+	help
+	  Register BPF tracing and perf-event program types when perf trace
+	  events are available.
+
 config GPU_TRACEPOINTS
 	bool
 

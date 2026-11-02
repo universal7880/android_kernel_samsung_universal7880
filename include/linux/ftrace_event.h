@@ -544,14 +544,14 @@ event_trigger_unlock_commit_regs(struct ftrace_event_file *file,
 
 static inline bool bpf_prog_array_valid(struct ftrace_event_call *call)
 {
-#if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_PERF_EVENTS)
+#ifdef CONFIG_BPF_EVENTS
 	return READ_ONCE(call->prog_array) != NULL;
 #else
 	return false;
 #endif
 }
 
-#ifdef CONFIG_BPF_SYSCALL
+#ifdef CONFIG_BPF_EVENTS
 unsigned int trace_call_bpf(struct ftrace_event_call *call, void *ctx);
 #else
 static inline unsigned int trace_call_bpf(struct ftrace_event_call *call, void *ctx)
