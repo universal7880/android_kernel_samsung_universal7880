@@ -56,15 +56,43 @@ const struct bpf_func_proto bpf_map_lookup_elem_proto = {
 	.arg2_type	= ARG_PTR_TO_MAP_KEY,
 };
 
+static bool bpf_map_mutation_nmi_safe(const struct bpf_map *map)
+{
+	switch (map->map_type) {
+	case BPF_MAP_TYPE_ARRAY:
+	case BPF_MAP_TYPE_PERCPU_ARRAY:
+		return true;
+	case BPF_MAP_TYPE_HASH:
+	case BPF_MAP_TYPE_PERCPU_HASH:
+	case BPF_MAP_TYPE_LRU_HASH:
+	case BPF_MAP_TYPE_LRU_PERCPU_HASH:
+		return !(map->map_flags & BPF_F_NO_PREALLOC);
+	default:
+		return false;
+	}
+}
+
 static u64 bpf_map_update_elem(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
 {
 	struct bpf_map *map = (struct bpf_map *) (unsigned long) r1;
 	void *key = (void *) (unsigned long) r2;
 	void *value = (void *) (unsigned long) r3;
 
+	int ret;
+
 	WARN_ON_ONCE(!rcu_read_lock_held());
 
-	return map->ops->map_update_elem(map, key, value, r4);
+	if (in_nmi() && !bpf_map_mutation_nmi_safe(map))
+		return -EOPNOTSUPP;
+
+	/* Prevent tracing/perf reentry while a backend holds map locks. */
+	preempt_disable();
+	__this_cpu_inc(bpf_prog_active);
+	ret = map->ops->map_update_elem(map, key, value, r4);
+	__this_cpu_dec(bpf_prog_active);
+	preempt_enable();
+
+	return ret;
 }
 
 const struct bpf_func_proto bpf_map_update_elem_proto = {
@@ -83,9 +111,21 @@ static u64 bpf_map_delete_elem(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
 	struct bpf_map *map = (struct bpf_map *) (unsigned long) r1;
 	void *key = (void *) (unsigned long) r2;
 
+	int ret;
+
 	WARN_ON_ONCE(!rcu_read_lock_held());
 
-	return map->ops->map_delete_elem(map, key);
+	if (in_nmi() && !bpf_map_mutation_nmi_safe(map))
+		return -EOPNOTSUPP;
+
+	/* Prevent tracing/perf reentry while a backend holds map locks. */
+	preempt_disable();
+	__this_cpu_inc(bpf_prog_active);
+	ret = map->ops->map_delete_elem(map, key);
+	__this_cpu_dec(bpf_prog_active);
+	preempt_enable();
+
+	return ret;
 }
 
 const struct bpf_func_proto bpf_map_delete_elem_proto = {
