@@ -452,6 +452,8 @@ static void cgroup_update_populated(struct cgroup *cgrp, bool populated)
 
 		if (cgrp->populated_kn)
 			kernfs_notify(cgrp->populated_kn);
+		if (cgrp->events_kn)
+			kernfs_notify(cgrp->events_kn);
 		cgrp = cgroup_parent(cgrp);
 	} while (cgrp);
 }
@@ -2868,6 +2870,13 @@ err_undo_css:
 	goto out_unlock;
 }
 
+static int cgroup_events_show(struct seq_file *seq, void *v)
+{
+	seq_printf(seq, "populated %d\n",
+		   (bool)seq_css(seq)->cgroup->populated_cnt);
+	return 0;
+}
+
 static int cgroup_populated_show(struct seq_file *seq, void *v)
 {
 	seq_printf(seq, "%d\n", (bool)seq_css(seq)->cgroup->populated_cnt);
@@ -3041,6 +3050,8 @@ static int cgroup_add_file(struct cgroup *cgrp, struct cftype *cft)
 
 	if (cft->seq_show == cgroup_populated_show)
 		cgrp->populated_kn = kn;
+	if (cft->seq_show == cgroup_events_show)
+		cgrp->events_kn = kn;
 	return 0;
 }
 
@@ -4222,6 +4233,11 @@ static struct cftype cgroup_dfl_base_files[] = {
 		.name = "cgroup.populated",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cgroup_populated_show,
+	},
+	{
+		.name = "cgroup.events",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cgroup_events_show,
 	},
 	{ }	/* terminate */
 };

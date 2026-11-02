@@ -125,7 +125,8 @@ struct cgroup {
 	int populated_cnt;
 
 	struct kernfs_node *kn;		/* cgroup kernfs entry */
-	struct kernfs_node *populated_kn; /* kn for "cgroup.subtree_populated" */
+	struct kernfs_node *populated_kn; /* kn for "cgroup.populated" */
+	struct kernfs_node *events_kn; /* kn for "cgroup.events" */
 
 	/*
 	 * The bitmask of subsystems enabled on the child cgroups.
