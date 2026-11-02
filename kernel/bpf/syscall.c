@@ -1016,6 +1016,42 @@ EXPORT_SYMBOL_GPL(bpf_prog_get_type);
 /* last field in 'union bpf_attr' used by this command */
 #define	BPF_PROG_LOAD_LAST_FIELD expected_attach_type
 
+static void bpf_prog_load_fixup_attach_type(union bpf_attr *attr)
+{
+	if (attr->prog_type == BPF_PROG_TYPE_CGROUP_SOCK &&
+	    !attr->expected_attach_type)
+		attr->expected_attach_type = BPF_CGROUP_INET_SOCK_CREATE;
+}
+
+static int bpf_prog_load_check_attach_type(enum bpf_prog_type type,
+					 enum bpf_attach_type expected_attach_type)
+{
+	switch (type) {
+	case BPF_PROG_TYPE_CGROUP_SKB:
+		return expected_attach_type == BPF_CGROUP_INET_INGRESS ||
+		       expected_attach_type == BPF_CGROUP_INET_EGRESS ? 0 : -EINVAL;
+	case BPF_PROG_TYPE_CGROUP_SOCK:
+		return expected_attach_type == BPF_CGROUP_INET_SOCK_CREATE ?
+			0 : -EINVAL;
+	case BPF_PROG_TYPE_CGROUP_SOCK_ADDR:
+		if (expected_attach_type != BPF_CGROUP_INET4_BIND &&
+		    expected_attach_type != BPF_CGROUP_INET6_BIND &&
+		    expected_attach_type != BPF_CGROUP_INET4_CONNECT &&
+		    expected_attach_type != BPF_CGROUP_INET6_CONNECT &&
+		    expected_attach_type != BPF_CGROUP_UDP4_SENDMSG &&
+		    expected_attach_type != BPF_CGROUP_UDP6_SENDMSG &&
+		    expected_attach_type != BPF_CGROUP_UDP4_RECVMSG &&
+		    expected_attach_type != BPF_CGROUP_UDP6_RECVMSG)
+			return -EINVAL;
+		return 0;
+	case BPF_PROG_TYPE_CGROUP_SOCKOPT:
+		return expected_attach_type == BPF_CGROUP_GETSOCKOPT ||
+		       expected_attach_type == BPF_CGROUP_SETSOCKOPT ? 0 : -EINVAL;
+	default:
+		return expected_attach_type ? -EINVAL : 0;
+	}
+}
+
 static int bpf_prog_load(union bpf_attr *attr)
 {
 	enum bpf_prog_type type = attr->prog_type;
@@ -1031,23 +1067,9 @@ static int bpf_prog_load(union bpf_attr *attr)
 	    attr->prog_flags & ~BPF_F_STRICT_ALIGNMENT)
 		return -EINVAL;
 
-	if (type == BPF_PROG_TYPE_CGROUP_SOCK_ADDR) {
-		if (attr->expected_attach_type != BPF_CGROUP_INET4_BIND &&
-		    attr->expected_attach_type != BPF_CGROUP_INET6_BIND &&
-		    attr->expected_attach_type != BPF_CGROUP_INET4_CONNECT &&
-		    attr->expected_attach_type != BPF_CGROUP_INET6_CONNECT &&
-		    attr->expected_attach_type != BPF_CGROUP_UDP4_SENDMSG &&
-		    attr->expected_attach_type != BPF_CGROUP_UDP6_SENDMSG &&
-		    attr->expected_attach_type != BPF_CGROUP_UDP4_RECVMSG &&
-		    attr->expected_attach_type != BPF_CGROUP_UDP6_RECVMSG)
-			return -EINVAL;
-	} else if (type == BPF_PROG_TYPE_CGROUP_SOCKOPT) {
-		if (attr->expected_attach_type != BPF_CGROUP_GETSOCKOPT &&
-		    attr->expected_attach_type != BPF_CGROUP_SETSOCKOPT)
-			return -EINVAL;
-	} else if (attr->expected_attach_type) {
+	bpf_prog_load_fixup_attach_type(attr);
+	if (bpf_prog_load_check_attach_type(type, attr->expected_attach_type))
 		return -EINVAL;
-	}
 
 	/* copy eBPF program license from user space */
 	if (strncpy_from_user(license, u64_to_ptr(attr->license),
@@ -1461,6 +1483,10 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 					 BPF_PROG_TYPE_CGROUP_SOCK);
 		if (IS_ERR(prog))
 			return PTR_ERR(prog);
+		if (prog->expected_attach_type != attr->attach_type) {
+			bpf_prog_put(prog);
+			return -EINVAL;
+		}
 		cgrp = cgroup_get_from_fd(attr->target_fd);
 		if (IS_ERR(cgrp)) {
 			bpf_prog_put(prog);
