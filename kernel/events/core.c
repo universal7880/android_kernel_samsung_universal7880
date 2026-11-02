@@ -6683,8 +6683,10 @@ static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 	if (event->attr.type != PERF_TYPE_TRACEPOINT)
 		return perf_event_set_bpf_handler(event, prog_fd);
 
-	is_kprobe = event->tp_event->flags & TRACE_EVENT_FL_KPROBE;
-	is_tracepoint = event->tp_event->flags & TRACE_EVENT_FL_TRACEPOINT;
+	is_kprobe = event->tp_event->flags &
+		(TRACE_EVENT_FL_KPROBE | TRACE_EVENT_FL_UPROBE);
+	is_tracepoint = event->tp_event->flags &
+		(TRACE_EVENT_FL_TRACEPOINT | TRACE_EVENT_FL_SYSCALL);
 	if (!is_kprobe && !is_tracepoint)
 		/* bpf programs can only be attached to u/kprobe or tracepoint */
 		return -EINVAL;

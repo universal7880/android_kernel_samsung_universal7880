@@ -1120,6 +1120,8 @@ static void __uprobe_perf_func(struct trace_uprobe *tu,
 		return;
 
 	preempt_disable();
+	if (bpf_prog_array_valid(call) && !trace_call_bpf(call, regs))
+		goto out;
 	head = this_cpu_ptr(call->perf_events);
 	if (hlist_empty(head))
 		goto out;
@@ -1303,6 +1305,7 @@ static int register_uprobe_event(struct trace_uprobe *tu)
 
 	call->class->reg = trace_uprobe_register;
 	call->data = tu;
+	call->flags |= TRACE_EVENT_FL_UPROBE;
 	ret = trace_add_event_call(call);
 
 	if (ret) {

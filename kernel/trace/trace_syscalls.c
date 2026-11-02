@@ -491,6 +491,7 @@ static int __init init_syscall_trace(struct ftrace_event_call *call)
 		return id;
 	}
 
+	call->flags |= TRACE_EVENT_FL_SYSCALL;
 	return id;
 }
 
@@ -574,7 +575,8 @@ static void perf_syscall_enter(void *ignore, struct pt_regs *regs, long id)
 		return;
 
 	head = this_cpu_ptr(sys_data->enter_event->perf_events);
-	if (hlist_empty(head))
+	if (!bpf_prog_array_valid(sys_data->enter_event) &&
+	    hlist_empty(head))
 		return;
 
 	/* get the size after alignment with the u32 buffer size field */
@@ -590,7 +592,8 @@ static void perf_syscall_enter(void *ignore, struct pt_regs *regs, long id)
 	rec->nr = syscall_nr;
 	syscall_get_arguments(current, regs, 0, sys_data->nb_args,
 			       (unsigned long *)&rec->args);
-	perf_trace_buf_submit(rec, size, rctx, 0, 1, regs, head, NULL);
+	perf_trace_run_bpf_submit(rec, size, rctx, sys_data->enter_event,
+				  0, 1, regs, head, NULL);
 }
 
 static int perf_sysenter_enable(struct ftrace_event_call *call)
@@ -648,7 +651,8 @@ static void perf_syscall_exit(void *ignore, struct pt_regs *regs, long ret)
 		return;
 
 	head = this_cpu_ptr(sys_data->exit_event->perf_events);
-	if (hlist_empty(head))
+	if (!bpf_prog_array_valid(sys_data->exit_event) &&
+	    hlist_empty(head))
 		return;
 
 	/* We can probably do that at build time */
@@ -662,7 +666,8 @@ static void perf_syscall_exit(void *ignore, struct pt_regs *regs, long ret)
 
 	rec->nr = syscall_nr;
 	rec->ret = syscall_get_return_value(current, regs);
-	perf_trace_buf_submit(rec, size, rctx, 0, 1, regs, head, NULL);
+	perf_trace_run_bpf_submit(rec, size, rctx, sys_data->exit_event,
+				  0, 1, regs, head, NULL);
 }
 
 static int perf_sysexit_enable(struct ftrace_event_call *call)
