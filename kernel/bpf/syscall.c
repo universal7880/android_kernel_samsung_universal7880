@@ -881,6 +881,7 @@ static void __bpf_prog_put(struct bpf_prog *prog, bool do_idr_lock)
 	if (atomic_dec_and_test(&prog->aux->refcnt)) {
 		/* bpf_prog_free_id() must be called first */
 		bpf_prog_free_id(prog, do_idr_lock);
+		bpf_prog_kallsyms_del(prog);
 		call_rcu(&prog->aux->rcu, __bpf_prog_put_rcu);
 	}
 }
@@ -1118,6 +1119,7 @@ static int bpf_prog_load(union bpf_attr *attr)
 	if (err)
 		goto free_used_maps;
 
+	bpf_prog_kallsyms_add(prog);
 	err = bpf_prog_new_fd(prog);
 	if (err < 0) {
 		/* failed to allocate fd.

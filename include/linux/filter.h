@@ -557,6 +557,7 @@ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
 #ifdef CONFIG_BPF_JIT
 extern int bpf_jit_enable;
 extern int bpf_jit_harden;
+extern int bpf_jit_kallsyms;
 extern long bpf_jit_limit;
 extern long bpf_jit_limit_max;
 
@@ -609,12 +610,86 @@ static inline bool bpf_jit_blinding_enabled(void)
 
 	return true;
 }
+static inline bool bpf_jit_kallsyms_enabled(void)
+{
+	/* There are a couple of corner cases where kallsyms should
+	 * not be enabled f.e. on hardening.
+	 */
+	if (bpf_jit_harden)
+		return false;
+	if (!bpf_jit_kallsyms)
+		return false;
+	if (bpf_jit_kallsyms == 1)
+		return true;
+
+	return false;
+}
+
+const char *__bpf_address_lookup(unsigned long addr, unsigned long *size,
+				 unsigned long *off, char *sym);
+bool is_bpf_text_address(unsigned long addr);
+int bpf_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
+		    char *sym);
+
+static inline const char *
+bpf_address_lookup(unsigned long addr, unsigned long *size,
+		   unsigned long *off, char **modname, char *sym)
+{
+	const char *ret = __bpf_address_lookup(addr, size, off, sym);
+
+	if (ret && modname)
+		*modname = NULL;
+	return ret;
+}
+
+void bpf_prog_kallsyms_add(struct bpf_prog *fp);
+void bpf_prog_kallsyms_del(struct bpf_prog *fp);
+
 #else
 static inline void bpf_jit_free(struct bpf_prog *fp)
 {
 	bpf_prog_unlock_free(fp);
 }
+static inline bool bpf_jit_kallsyms_enabled(void)
+{
+	return false;
+}
+
+static inline const char *
+__bpf_address_lookup(unsigned long addr, unsigned long *size,
+		     unsigned long *off, char *sym)
+{
+	return NULL;
+}
+
+static inline bool is_bpf_text_address(unsigned long addr)
+{
+	return false;
+}
+
+static inline int bpf_get_kallsym(unsigned int symnum, unsigned long *value,
+				  char *type, char *sym)
+{
+	return -ERANGE;
+}
+
+static inline const char *
+bpf_address_lookup(unsigned long addr, unsigned long *size,
+		   unsigned long *off, char **modname, char *sym)
+{
+	return NULL;
+}
+
+static inline void bpf_prog_kallsyms_add(struct bpf_prog *fp)
+{
+}
+
+static inline void bpf_prog_kallsyms_del(struct bpf_prog *fp)
+{
+}
 #endif /* CONFIG_BPF_JIT */
+
+#define BPF_SYM_ELF_TYPE 't'
 
 #define BPF_ANC		BIT(15)
 
@@ -645,6 +720,8 @@ static inline u16 bpf_anc_helper(const struct sock_filter *ftest)
 	case BPF_LD | BPF_W | BPF_ABS:
 	case BPF_LD | BPF_H | BPF_ABS:
 	case BPF_LD | BPF_B | BPF_ABS:
+#define BPF_SYM_ELF_TYPE 't'
+
 #define BPF_ANCILLARY(CODE)	case SKF_AD_OFF + SKF_AD_##CODE:	\
 				return BPF_ANC | SKF_AD_##CODE
 		switch (ftest->k) {

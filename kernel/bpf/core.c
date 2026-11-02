@@ -28,6 +28,7 @@
 #include <linux/moduleloader.h>
 #include <linux/bpf.h>
 #include <linux/cryptohash.h>
+#include <linux/kallsyms.h>
 
 #include <asm/unaligned.h>
 
@@ -96,6 +97,7 @@ struct bpf_prog *bpf_prog_alloc(unsigned int size, gfp_t gfp_extra_flags)
 	fp->pages = size / PAGE_SIZE;
 	fp->aux = aux;
 	fp->aux->prog = fp;
+	INIT_LIST_HEAD_RCU(&fp->aux->ksym_lnode);
 
 	return fp;
 }
@@ -269,6 +271,7 @@ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
 /* All BPF JIT sysctl knobs here. */
 int bpf_jit_enable   __read_mostly = IS_BUILTIN(CONFIG_BPF_JIT_ALWAYS_ON);
 int bpf_jit_harden   __read_mostly;
+int bpf_jit_kallsyms __read_mostly;
 long bpf_jit_limit   __read_mostly;
 long bpf_jit_limit_max __read_mostly;
 
@@ -313,6 +316,140 @@ static int bpf_jit_charge_modmem(u32 pages)
 static void bpf_jit_uncharge_modmem(u32 pages)
 {
 	atomic_long_sub(pages, &bpf_jit_current);
+}
+
+static void bpf_get_prog_addr_region(const struct bpf_prog *prog,
+				     unsigned long *start, unsigned long *end)
+{
+	*start = (unsigned long)prog->bpf_func;
+	*end = *start + prog->jited_len;
+}
+
+static void bpf_get_prog_name(const struct bpf_prog *prog, char *sym)
+{
+	int i;
+
+	sym += snprintf(sym, KSYM_NAME_LEN, "bpf_prog_");
+	for (i = 0; i < BPF_TAG_SIZE; i++)
+		sym += snprintf(sym, 3, "%02x", prog->tag[i]);
+}
+
+static DEFINE_SPINLOCK(bpf_lock);
+static LIST_HEAD(bpf_kallsyms);
+
+static bool bpf_prog_kallsyms_candidate(const struct bpf_prog *fp)
+{
+	return fp->jited && fp->type != BPF_PROG_TYPE_UNSPEC;
+}
+
+void bpf_prog_kallsyms_add(struct bpf_prog *fp)
+{
+	unsigned long flags;
+
+	if (!bpf_prog_kallsyms_candidate(fp) || !capable(CAP_SYS_ADMIN))
+		return;
+
+	spin_lock_irqsave(&bpf_lock, flags);
+	WARN_ON_ONCE(!list_empty(&fp->aux->ksym_lnode));
+	list_add_tail_rcu(&fp->aux->ksym_lnode, &bpf_kallsyms);
+	spin_unlock_irqrestore(&bpf_lock, flags);
+}
+
+void bpf_prog_kallsyms_del(struct bpf_prog *fp)
+{
+	unsigned long flags;
+
+	if (!bpf_prog_kallsyms_candidate(fp))
+		return;
+
+	spin_lock_irqsave(&bpf_lock, flags);
+	if (!list_empty(&fp->aux->ksym_lnode) &&
+	    fp->aux->ksym_lnode.prev != LIST_POISON2)
+		list_del_rcu(&fp->aux->ksym_lnode);
+	spin_unlock_irqrestore(&bpf_lock, flags);
+}
+
+static struct bpf_prog *bpf_prog_kallsyms_find(unsigned long addr)
+{
+	struct bpf_prog_aux *aux;
+
+	if (!bpf_jit_kallsyms_enabled())
+		return NULL;
+
+	/* This small diagnostic registry uses the same RCU list as enumeration. */
+	list_for_each_entry_rcu(aux, &bpf_kallsyms, ksym_lnode) {
+		unsigned long start, end;
+
+		bpf_get_prog_addr_region(aux->prog, &start, &end);
+		if (addr >= start && addr < end)
+			return aux->prog;
+	}
+	return NULL;
+}
+
+const char *__bpf_address_lookup(unsigned long addr, unsigned long *size,
+				 unsigned long *off, char *sym)
+{
+	unsigned long symbol_start, symbol_end;
+	struct bpf_prog *prog;
+	char *ret = NULL;
+
+	rcu_read_lock();
+	prog = bpf_prog_kallsyms_find(addr);
+	if (prog) {
+		bpf_get_prog_addr_region(prog, &symbol_start, &symbol_end);
+		bpf_get_prog_name(prog, sym);
+
+		ret = sym;
+		if (size)
+			*size = symbol_end - symbol_start;
+		if (off)
+			*off  = addr - symbol_start;
+	}
+	rcu_read_unlock();
+
+	return ret;
+}
+
+bool is_bpf_text_address(unsigned long addr)
+{
+	bool ret;
+
+	rcu_read_lock();
+	ret = bpf_prog_kallsyms_find(addr) != NULL;
+	rcu_read_unlock();
+
+	return ret;
+}
+
+int bpf_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
+		    char *sym)
+{
+	unsigned long symbol_start, symbol_end;
+	struct bpf_prog_aux *aux;
+	unsigned int it = 0;
+	int ret = -ERANGE;
+
+	if (!bpf_jit_kallsyms_enabled())
+		return ret;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(aux, &bpf_kallsyms, ksym_lnode) {
+		if (it++ != symnum)
+			continue;
+
+		bpf_get_prog_addr_region(aux->prog, &symbol_start, &symbol_end);
+		bpf_get_prog_name(aux->prog, sym);
+
+		*value = symbol_start;
+		*type  = BPF_SYM_ELF_TYPE;
+
+		ret = 0;
+		break;
+	}
+	rcu_read_unlock();
+
+	return ret;
 }
 
 struct bpf_binary_header *
