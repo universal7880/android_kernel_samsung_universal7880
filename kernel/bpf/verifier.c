@@ -3777,11 +3777,27 @@ static bool reg_type_mismatch(enum bpf_reg_type src, enum bpf_reg_type prev)
 static int check_return_code(struct bpf_verifier_env *env)
 {
 	struct bpf_reg_state *reg = &env->cur_state.regs[BPF_REG_0];
+	u64 minimum = 0;
 
-	if (env->prog->type != BPF_PROG_TYPE_CGROUP_SOCKOPT)
+	switch (env->prog->type) {
+	case BPF_PROG_TYPE_CGROUP_SOCK_ADDR:
+		if (env->prog->expected_attach_type == BPF_CGROUP_UDP4_RECVMSG ||
+		    env->prog->expected_attach_type == BPF_CGROUP_UDP6_RECVMSG)
+			minimum = 1;
+		/* fall through */
+	case BPF_PROG_TYPE_CGROUP_SKB:
+	case BPF_PROG_TYPE_CGROUP_SOCK:
+	case BPF_PROG_TYPE_CGROUP_SOCKOPT:
+		break;
+	default:
 		return 0;
-	if (reg->type != SCALAR_VALUE || reg->umax_value > 1) {
-		verbose("sockopt programs must return 0 or 1\n");
+	}
+
+	if (reg->type != SCALAR_VALUE || reg->umin_value < minimum ||
+	    reg->umax_value > 1 ||
+	    !tnum_in(tnum_range(minimum, 1), reg->var_off)) {
+		verbose("cgroup programs must return %s\n",
+			minimum ? "1" : "0 or 1");
 		return -EINVAL;
 	}
 	return 0;
