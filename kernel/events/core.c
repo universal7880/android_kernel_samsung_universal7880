@@ -5959,10 +5959,15 @@ static int __perf_event_overflow(struct perf_event *event,
 		irq_work_queue(&event->pending);
 	}
 
-	if (event->overflow_handler)
-		event->overflow_handler(event, data, regs);
-	else
-		perf_event_output(event, data, regs);
+	{
+		perf_overflow_handler_t handler =
+			smp_load_acquire(&event->overflow_handler);
+
+		if (handler)
+			handler(event, data, regs);
+		else
+			perf_event_output(event, data, regs);
+	}
 
 	if (*perf_event_fasync(event) && event->pending_kill) {
 		event->pending_wakeup = 1;
@@ -6422,6 +6427,77 @@ static struct pmu perf_swevent = {
 	.read		= perf_swevent_read,
 };
 
+#ifdef CONFIG_BPF_SYSCALL
+static void bpf_overflow_handler(struct perf_event *event,
+				 struct perf_sample_data *data,
+				 struct pt_regs *regs)
+{
+	struct bpf_perf_event_data_kern ctx = {
+		.data = data,
+		.regs = regs,
+	};
+	int ret = 0;
+
+	preempt_disable();
+	if (unlikely(__this_cpu_inc_return(bpf_prog_active) != 1))
+		goto out;
+	rcu_read_lock();
+	ret = BPF_PROG_RUN(event->prog, (void *)&ctx);
+	rcu_read_unlock();
+out:
+	__this_cpu_dec(bpf_prog_active);
+	preempt_enable();
+	if (!ret)
+		return;
+
+	if (event->orig_overflow_handler)
+		event->orig_overflow_handler(event, data, regs);
+	else
+		perf_event_output(event, data, regs);
+}
+
+static int perf_event_set_bpf_handler(struct perf_event *event, u32 prog_fd)
+{
+	struct bpf_prog *prog;
+
+	if (event->overflow_handler_context)
+		/* hw breakpoint or kernel counter */
+		return -EINVAL;
+
+	if (event->prog)
+		return -EEXIST;
+
+	prog = bpf_prog_get_type(prog_fd, BPF_PROG_TYPE_PERF_EVENT);
+	if (IS_ERR(prog))
+		return PTR_ERR(prog);
+
+	event->prog = prog;
+	event->orig_overflow_handler = smp_load_acquire(&event->overflow_handler);
+	smp_store_release(&event->overflow_handler, bpf_overflow_handler);
+	return 0;
+}
+
+static void perf_event_free_bpf_handler(struct perf_event *event)
+{
+	struct bpf_prog *prog = event->prog;
+
+	if (!prog)
+		return;
+
+	smp_store_release(&event->overflow_handler, event->orig_overflow_handler);
+	event->prog = NULL;
+	bpf_prog_put(prog);
+}
+#else
+static int perf_event_set_bpf_handler(struct perf_event *event, u32 prog_fd)
+{
+	return -EOPNOTSUPP;
+}
+static void perf_event_free_bpf_handler(struct perf_event *event)
+{
+}
+#endif
+
 #ifdef CONFIG_EVENT_TRACING
 
 static int perf_tp_filter_match(struct perf_event *event,
@@ -6577,7 +6653,7 @@ static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 	struct bpf_prog *prog;
 
 	if (event->attr.type != PERF_TYPE_TRACEPOINT)
-		return -EINVAL;
+		return perf_event_set_bpf_handler(event, prog_fd);
 
 	if (event->tp_event->prog)
 		return -EEXIST;
@@ -6616,6 +6692,8 @@ static void perf_event_free_bpf_prog(struct perf_event *event)
 {
 	struct bpf_prog *prog;
 
+	perf_event_free_bpf_handler(event);
+
 	if (!event->tp_event)
 		return;
 
@@ -6643,11 +6721,12 @@ static void perf_event_free_filter(struct perf_event *event)
 
 static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 {
-	return -ENOENT;
+	return perf_event_set_bpf_handler(event, prog_fd);
 }
 
 static void perf_event_free_bpf_prog(struct perf_event *event)
 {
+	perf_event_free_bpf_handler(event);
 }
 #endif /* CONFIG_EVENT_TRACING */
 
@@ -7383,8 +7462,20 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (parent_event)
 		event->clock = parent_event->clock;
 	if (!overflow_handler && parent_event) {
-		overflow_handler = parent_event->overflow_handler;
+		overflow_handler = smp_load_acquire(&parent_event->overflow_handler);
 		context = parent_event->overflow_handler_context;
+#ifdef CONFIG_BPF_SYSCALL
+		if (overflow_handler == bpf_overflow_handler) {
+			struct bpf_prog *prog = bpf_prog_inc(parent_event->prog);
+
+			if (IS_ERR(prog)) {
+				err = PTR_ERR(prog);
+				goto err_ns;
+			}
+			event->prog = prog;
+			event->orig_overflow_handler = parent_event->orig_overflow_handler;
+		}
+#endif
 	}
 
 	event->overflow_handler	= overflow_handler;
@@ -7435,6 +7526,7 @@ err_pmu:
 		event->destroy(event);
 	module_put(pmu->module);
 err_ns:
+	perf_event_free_bpf_handler(event);
 	if (event->ns)
 		put_pid_ns(event->ns);
 	kfree(event);
@@ -8433,9 +8525,7 @@ inherit_event(struct perf_event *parent_event,
 	}
 
 	child_event->ctx = child_ctx;
-	child_event->overflow_handler = parent_event->overflow_handler;
-	child_event->overflow_handler_context
-		= parent_event->overflow_handler_context;
+	/* Callback state and any BPF reference were inherited at allocation. */
 
 	/*
 	 * Precalculate sample_data sizes
