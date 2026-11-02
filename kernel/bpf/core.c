@@ -1457,29 +1457,41 @@ int bpf_prog_array_copy_to_user(struct bpf_prog_array __rcu *progs,
 {
 	struct bpf_prog_array *array;
 	struct bpf_prog **slot, *prog;
-	u32 i = 0, id;
+	u32 *ids = NULL, needed = 0, copied = 0;
 	int ret = 0;
 
 	rcu_read_lock();
 	array = rcu_dereference(progs);
 	if (!array)
 		goto out;
+	for (slot = array->progs; (prog = READ_ONCE(*slot)); slot++)
+		if (prog != &dummy_bpf_prog.prog)
+			needed++;
+	if (needed > cnt) {
+		needed = cnt;
+		ret = -ENOSPC;
+	}
+	if (!needed)
+		goto out;
+
+	/* Neither allocation nor user faults may sleep under RCU. */
+	ids = kmalloc_array(needed, sizeof(*ids), GFP_ATOMIC);
+	if (!ids) {
+		ret = -ENOMEM;
+		goto out;
+	}
 	for (slot = array->progs; (prog = READ_ONCE(*slot)); slot++) {
 		if (prog == &dummy_bpf_prog.prog)
 			continue;
-		if (i == cnt) {
-			ret = -ENOSPC;
-			goto out;
-		}
-		id = prog->aux->id;
-		if (copy_to_user(prog_ids + i, &id, sizeof(id))) {
-			ret = -EFAULT;
-			goto out;
-		}
-		i++;
+		ids[copied++] = prog->aux->id;
+		if (copied == needed)
+			break;
 	}
 out:
 	rcu_read_unlock();
+	if (copied && copy_to_user(prog_ids, ids, copied * sizeof(*ids)))
+		ret = -EFAULT;
+	kfree(ids);
 	return ret;
 }
 
