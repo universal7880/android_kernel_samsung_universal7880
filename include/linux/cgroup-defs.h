@@ -234,6 +234,9 @@ struct css_set {
 	/* Reference count */
 	atomic_t refcount;
 
+	/* Tasks on tasks and mg_tasks, protected by css_set_lock. */
+	int nr_tasks;
+
 	/*
 	 * List running through all cgroup groups in the same hash
 	 * slot. Protected by css_set_lock

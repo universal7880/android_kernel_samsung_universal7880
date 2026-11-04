@@ -1541,6 +1541,7 @@ static void cgroup_enable_task_cg_lists(void)
 
 			list_add(&p->cg_list, &cset->tasks);
 			get_css_set(cset);
+			cset->nr_tasks++;
 		}
 		spin_unlock(&p->sighand->siglock);
 	} while_each_thread(g, p);
@@ -2053,6 +2054,8 @@ static void cgroup_task_migrate(struct cgroup *old_cgrp,
 	 */
 	css_task_iter_skip(old_cset, tsk);
 	list_move_tail(&tsk->cg_list, &new_cset->mg_tasks);
+	old_cset->nr_tasks--;
+	new_cset->nr_tasks++;
 
 	/*
 	 * We just gained a reference on old_cset by taking it from the
@@ -3323,15 +3326,24 @@ int cgroup_add_legacy_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
  *
  * Return the number of tasks in the cgroup.
  */
+static int __cgroup_task_count(const struct cgroup *cgrp)
+{
+	struct cgrp_cset_link *link;
+	int count = 0;
+
+	lockdep_assert_held(&css_set_lock);
+	list_for_each_entry(link, &cgrp->cset_links, cset_link)
+		count += link->cset->nr_tasks;
+	return count;
+}
+
 static int cgroup_task_count(const struct cgroup *cgrp)
 {
 	unsigned long css_flags;
-	int count = 0;
-	struct cgrp_cset_link *link;
+	int count;
 
 	spin_lock_irqsave(&css_set_lock, css_flags);
-	list_for_each_entry(link, &cgrp->cset_links, cset_link)
-		count += atomic_read(&link->cset->refcount);
+	count = __cgroup_task_count(cgrp);
 	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	return count;
 }
@@ -5235,6 +5247,7 @@ void cgroup_post_fork(struct task_struct *child)
 			rcu_assign_pointer(child->cgroups, cset);
 			list_add(&child->cg_list, &cset->tasks);
 			get_css_set(cset);
+			cset->nr_tasks++;
 		}
 		spin_unlock_irqrestore(&css_set_lock, css_flags);
 	}
@@ -5286,6 +5299,7 @@ void cgroup_exit(struct task_struct *tsk)
 		spin_lock_irqsave(&css_set_lock, css_flags);
 		css_task_iter_skip(task_css_set(tsk), tsk);
 		list_del_init(&tsk->cg_list);
+		task_css_set(tsk)->nr_tasks--;
 		spin_unlock_irqrestore(&css_set_lock, css_flags);
 		put_cset = true;
 	}
