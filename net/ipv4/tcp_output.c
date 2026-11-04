@@ -2201,6 +2201,7 @@ void tcp_send_loss_probe(struct sock *sk)
 		goto rearm_timer;
 	}
 
+	skb = tcp_write_queue_tail(sk);
 	if (unlikely(!skb)) {
 		WARN_ONCE(tp->packets_out,
 			  "invalid inflight: %u state %u cwnd %u mss %d\n",
