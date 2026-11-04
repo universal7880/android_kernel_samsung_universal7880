@@ -490,6 +490,10 @@ struct css_task_iter {
 	struct list_head		*task_pos;
 	struct list_head		*tasks_head;
 	struct list_head		*mg_tasks_head;
+
+	struct css_set			*cur_cset;
+	struct task_struct		*cur_task;
+	struct list_head		iters_node;
 };
 
 void css_task_iter_start(struct cgroup_subsys_state *css,

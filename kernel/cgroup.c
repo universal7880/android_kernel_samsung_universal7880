@@ -189,6 +189,7 @@ static struct cftype cgroup_legacy_base_files[];
 
 static int rebind_subsystems(struct cgroup_root *dst_root,
 			     unsigned int ss_mask);
+static void css_task_iter_advance(struct css_task_iter *it);
 static int cgroup_destroy_locked(struct cgroup *cgrp);
 static int create_css(struct cgroup *cgrp, struct cgroup_subsys *ss,
 		      bool visible);
@@ -415,6 +416,7 @@ struct css_set init_css_set = {
 	.mg_tasks		= LIST_HEAD_INIT(init_css_set.mg_tasks),
 	.mg_preload_node	= LIST_HEAD_INIT(init_css_set.mg_preload_node),
 	.mg_node		= LIST_HEAD_INIT(init_css_set.mg_node),
+	.task_iters		= LIST_HEAD_INIT(init_css_set.task_iters),
 };
 
 static int css_set_count	= 1;	/* 1 for init_css_set */
@@ -774,6 +776,7 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 	INIT_LIST_HEAD(&cset->mg_tasks);
 	INIT_LIST_HEAD(&cset->mg_preload_node);
 	INIT_LIST_HEAD(&cset->mg_node);
+	INIT_LIST_HEAD(&cset->task_iters);
 	INIT_HLIST_NODE(&cset->hlist);
 
 	/* Copy the set of subsystem state objects generated in
@@ -1999,6 +2002,17 @@ struct task_struct *cgroup_taskset_next(struct cgroup_taskset *tset)
 	return NULL;
 }
 
+/* Advance pending iterator positions before unlinking or moving a task. */
+static void css_task_iter_skip(struct css_set *cset, struct task_struct *task)
+{
+	struct css_task_iter *it, *pos;
+
+	lockdep_assert_held(&css_set_rwsem);
+	list_for_each_entry_safe(it, pos, &cset->task_iters, iters_node)
+		if (it->task_pos == &task->cg_list)
+			css_task_iter_advance(it);
+}
+
 /**
  * cgroup_task_migrate - move a task from one cgroup to another.
  * @old_cgrp: the cgroup @tsk is being migrated from
@@ -2033,6 +2047,7 @@ static void cgroup_task_migrate(struct cgroup *old_cgrp,
 	 * ensures that the dst_cset of the leader is the first on the
 	 * tset's dst_csets list.
 	 */
+	css_task_iter_skip(old_cset, tsk);
 	list_move_tail(&tsk->cg_list, &new_cset->mg_tasks);
 
 	/*
@@ -2231,6 +2246,7 @@ static int cgroup_migrate(struct cgroup *cgrp, struct task_struct *leader,
 		 * cgroup_taskset_first() must always return the leader.
 		 * Take care to avoid disturbing the ordering.
 		 */
+		css_task_iter_skip(cset, task);
 		list_move_tail(&task->cg_list, &cset->mg_tasks);
 		if (list_empty(&cset->mg_node))
 			list_add_tail(&cset->mg_node, &tset.src_csets);
@@ -3538,126 +3554,118 @@ bool css_has_online_children(struct cgroup_subsys_state *css)
 }
 
 /**
- * css_advance_task_iter - advance a task itererator to the next css_set
- * @it: the iterator to advance
- *
- * Advance @it to the next css_set to walk.
+ * css_task_iter_advance_css_set - move to the next non-empty css_set
+ * @it: iterator protected by css_set_rwsem
  */
-static void css_advance_task_iter(struct css_task_iter *it)
+static void css_task_iter_advance_css_set(struct css_task_iter *it)
 {
 	struct list_head *l = it->cset_pos;
 	struct cgrp_cset_link *link;
 	struct css_set *cset;
 
-	/* Advance to the next non-empty css_set */
+	lockdep_assert_held(&css_set_rwsem);
 	do {
 		l = l->next;
 		if (l == it->cset_head) {
 			it->cset_pos = NULL;
+			it->task_pos = NULL;
 			return;
 		}
-
-		if (it->ss) {
+		if (it->ss)
 			cset = container_of(l, struct css_set,
 					    e_cset_node[it->ss->id]);
-		} else {
+		else {
 			link = list_entry(l, struct cgrp_cset_link, cset_link);
 			cset = link->cset;
 		}
 	} while (list_empty(&cset->tasks) && list_empty(&cset->mg_tasks));
 
 	it->cset_pos = l;
-
-	if (!list_empty(&cset->tasks))
-		it->task_pos = cset->tasks.next;
-	else
-		it->task_pos = cset->mg_tasks.next;
-
+	it->task_pos = !list_empty(&cset->tasks) ?
+		cset->tasks.next : cset->mg_tasks.next;
 	it->tasks_head = &cset->tasks;
 	it->mg_tasks_head = &cset->mg_tasks;
+
+	/* Pin the css_set and track the next task across unlocked steps. */
+	if (it->cur_cset) {
+		list_del(&it->iters_node);
+		put_css_set_locked(it->cur_cset);
+	}
+	get_css_set(cset);
+	it->cur_cset = cset;
+	list_add(&it->iters_node, &cset->task_iters);
+}
+
+static void css_task_iter_advance(struct css_task_iter *it)
+{
+	struct list_head *l = it->task_pos;
+
+	lockdep_assert_held(&css_set_rwsem);
+	WARN_ON_ONCE(!l);
+	l = l->next;
+	if (l == it->tasks_head)
+		l = it->mg_tasks_head->next;
+	if (l == it->mg_tasks_head)
+		css_task_iter_advance_css_set(it);
+	else
+		it->task_pos = l;
 }
 
 /**
- * css_task_iter_start - initiate task iteration
- * @css: the css to walk tasks of
- * @it: the task iterator to use
+ * css_task_iter_start - begin an iteration without retaining the lock
+ * @css: css whose tasks are to be walked
+ * @it: iterator to initialize
  *
- * Initiate iteration through the tasks of @css.  The caller can call
- * css_task_iter_next() to walk through the tasks until the function
- * returns NULL.  On completion of iteration, css_task_iter_end() must be
- * called.
- *
- * Note that this function acquires a lock which is released when the
- * iteration finishes.  The caller can't sleep while iteration is in
- * progress.
+ * Callers may sleep between steps. End the iteration with css_task_iter_end().
  */
 void css_task_iter_start(struct cgroup_subsys_state *css,
 			 struct css_task_iter *it)
-	__acquires(css_set_rwsem)
 {
-	/* no one should try to iterate before mounting cgroups */
 	WARN_ON_ONCE(!use_task_css_set_links);
-
-	down_read(&css_set_rwsem);
-
+	memset(it, 0, sizeof(*it));
+	down_write(&css_set_rwsem);
 	it->ss = css->ss;
-
 	if (it->ss)
-		it->cset_pos = &css->cgroup->e_csets[css->ss->id];
+		it->cset_pos = &css->cgroup->e_csets[it->ss->id];
 	else
 		it->cset_pos = &css->cgroup->cset_links;
-
 	it->cset_head = it->cset_pos;
-
-	css_advance_task_iter(it);
+	css_task_iter_advance_css_set(it);
+	up_write(&css_set_rwsem);
 }
 
 /**
- * css_task_iter_next - return the next task for the iterator
- * @it: the task iterator being iterated
- *
- * The "next" function for task iteration.  @it should have been
- * initialized via css_task_iter_start().  Returns NULL when the iteration
- * reaches the end.
+ * css_task_iter_next - return a task pinned until the next step or end
+ * @it: iterator initialized by css_task_iter_start()
  */
 struct task_struct *css_task_iter_next(struct css_task_iter *it)
 {
-	struct task_struct *res;
-	struct list_head *l = it->task_pos;
+	if (it->cur_task) {
+		put_task_struct(it->cur_task);
+		it->cur_task = NULL;
+	}
 
-	/* If the iterator cg is NULL, we have no tasks */
-	if (!it->cset_pos)
-		return NULL;
-	res = list_entry(l, struct task_struct, cg_list);
-
-	/*
-	 * Advance iterator to find next entry.  cset->tasks is consumed
-	 * first and then ->mg_tasks.  After ->mg_tasks, we move onto the
-	 * next cset.
-	 */
-	l = l->next;
-
-	if (l == it->tasks_head)
-		l = it->mg_tasks_head->next;
-
-	if (l == it->mg_tasks_head)
-		css_advance_task_iter(it);
-	else
-		it->task_pos = l;
-
-	return res;
+	down_write(&css_set_rwsem);
+	if (it->task_pos) {
+		it->cur_task = list_entry(it->task_pos, struct task_struct,
+					  cg_list);
+		get_task_struct(it->cur_task);
+		css_task_iter_advance(it);
+	}
+	up_write(&css_set_rwsem);
+	return it->cur_task;
 }
 
-/**
- * css_task_iter_end - finish task iteration
- * @it: the task iterator to finish
- *
- * Finish task iteration started by css_task_iter_start().
- */
 void css_task_iter_end(struct css_task_iter *it)
-	__releases(css_set_rwsem)
 {
-	up_read(&css_set_rwsem);
+	if (it->cur_cset) {
+		down_write(&css_set_rwsem);
+		list_del(&it->iters_node);
+		put_css_set_locked(it->cur_cset);
+		up_write(&css_set_rwsem);
+	}
+	if (it->cur_task)
+		put_task_struct(it->cur_task);
 }
 
 /**
@@ -5258,6 +5266,7 @@ void cgroup_exit(struct task_struct *tsk)
 	 */
 	if (!list_empty(&tsk->cg_list)) {
 		down_write(&css_set_rwsem);
+		css_task_iter_skip(task_css_set(tsk), tsk);
 		list_del_init(&tsk->cg_list);
 		up_write(&css_set_rwsem);
 		put_cset = true;
