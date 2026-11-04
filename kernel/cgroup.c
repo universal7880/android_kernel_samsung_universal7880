@@ -61,6 +61,8 @@
 #include <linux/file.h>
 #include <net/sock.h>
 
+#include "cgroup-internal.h"
+
 /*
  * pidlists linger the following amount before being destroyed.  The goal
  * is avoiding frequent destruction in the middle of consecutive read calls
@@ -82,14 +84,11 @@
  * These locks are exported if CONFIG_PROVE_RCU so that accessors in
  * cgroup.h can use them for lockdep annotations.
  */
-#ifdef CONFIG_PROVE_RCU
 DEFINE_MUTEX(cgroup_mutex);
 DEFINE_SPINLOCK(css_set_lock);
+#ifdef CONFIG_PROVE_RCU
 EXPORT_SYMBOL_GPL(cgroup_mutex);
 EXPORT_SYMBOL_GPL(css_set_lock);
-#else
-static DEFINE_MUTEX(cgroup_mutex);
-static DEFINE_SPINLOCK(css_set_lock);
 #endif
 
 /*
@@ -277,12 +276,6 @@ static struct cgroup_subsys_state *cgroup_e_css(struct cgroup *cgrp,
 		cgrp = cgroup_parent(cgrp);
 
 	return cgroup_css(cgrp, ss);
-}
-
-/* convenient tests for these bits */
-static inline bool cgroup_is_dead(const struct cgroup *cgrp)
-{
-	return !(cgrp->self.flags & CSS_ONLINE);
 }
 
 struct cgroup_subsys_state *of_css(struct kernfs_open_file *of)
@@ -2056,6 +2049,8 @@ static void cgroup_task_migrate(struct cgroup *old_cgrp,
 	list_move_tail(&tsk->cg_list, &new_cset->mg_tasks);
 	old_cset->nr_tasks--;
 	new_cset->nr_tasks++;
+	cgroup_freezer_migrate_task(tsk, old_cset->dfl_cgrp,
+				   new_cset->dfl_cgrp);
 
 	/*
 	 * We just gained a reference on old_cset by taking it from the
@@ -2898,11 +2893,54 @@ err_undo_css:
 	goto out_unlock;
 }
 
+void cgroup_notify_frozen(struct cgroup *cgrp)
+{
+	lockdep_assert_held(&css_set_lock);
+	if (cgrp->events_kn)
+		kernfs_notify(cgrp->events_kn);
+}
+
 static int cgroup_events_show(struct seq_file *seq, void *v)
 {
-	seq_printf(seq, "populated %d\n",
-		   (bool)seq_css(seq)->cgroup->populated_cnt);
+	struct cgroup *cgrp = seq_css(seq)->cgroup;
+
+	seq_printf(seq, "populated %d\n", (bool)cgrp->populated_cnt);
+	seq_printf(seq, "frozen %d\n", test_bit(CGRP_FROZEN, &cgrp->flags));
 	return 0;
+}
+
+static int cgroup_freeze_show(struct seq_file *seq, void *v)
+{
+	struct cgroup *cgrp = seq_css(seq)->cgroup;
+
+	seq_printf(seq, "%d\n", cgrp->freezer.freeze);
+
+	return 0;
+}
+
+static ssize_t cgroup_freeze_write(struct kernfs_open_file *of,
+				   char *buf, size_t nbytes, loff_t off)
+{
+	struct cgroup *cgrp;
+	ssize_t ret;
+	int freeze;
+
+	ret = kstrtoint(strstrip(buf), 0, &freeze);
+	if (ret)
+		return ret;
+
+	if (freeze < 0 || freeze > 1)
+		return -ERANGE;
+
+	cgrp = cgroup_kn_lock_live(of->kn);
+	if (!cgrp)
+		return -ENOENT;
+
+	cgroup_freeze(cgrp, freeze);
+
+	cgroup_kn_unlock(of->kn);
+
+	return nbytes;
 }
 
 static int cgroup_populated_show(struct seq_file *seq, void *v)
@@ -3326,7 +3364,7 @@ int cgroup_add_legacy_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
  *
  * Return the number of tasks in the cgroup.
  */
-static int __cgroup_task_count(const struct cgroup *cgrp)
+int __cgroup_task_count(const struct cgroup *cgrp)
 {
 	struct cgrp_cset_link *link;
 	int count = 0;
@@ -4269,6 +4307,12 @@ static struct cftype cgroup_dfl_base_files[] = {
 		.seq_show = cgroup_populated_show,
 	},
 	{
+		.name = "cgroup.freeze",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cgroup_freeze_show,
+		.write = cgroup_freeze_write,
+	},
+	{
 		.name = "cgroup.events",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cgroup_events_show,
@@ -4605,7 +4649,8 @@ err_free_css:
 static int cgroup_mkdir(struct kernfs_node *parent_kn, const char *name,
 			umode_t mode)
 {
-	struct cgroup *parent, *cgrp;
+	struct cgroup *parent, *cgrp, *ancestor;
+	unsigned long css_flags;
 	struct cgroup_root *root;
 	struct cgroup_subsys *ss;
 	struct kernfs_node *kn;
@@ -4678,6 +4723,19 @@ static int cgroup_mkdir(struct kernfs_node *parent_kn, const char *name,
 	list_add_tail_rcu(&cgrp->self.sibling, &cgroup_parent(cgrp)->self.children);
 	atomic_inc(&root->nr_cgrps);
 	cgroup_get(parent);
+
+	spin_lock_irqsave(&css_set_lock, css_flags);
+	cgrp->freezer.e_freeze = parent->freezer.e_freeze;
+	if (cgrp->freezer.e_freeze) {
+		set_bit(CGRP_FREEZE, &cgrp->flags);
+		set_bit(CGRP_FROZEN, &cgrp->flags);
+	}
+	for (ancestor = parent; ancestor; ancestor = cgroup_parent(ancestor)) {
+		ancestor->nr_descendants++;
+		if (cgrp->freezer.e_freeze)
+			ancestor->freezer.nr_frozen_descendants++;
+	}
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	/*
 	 * @cgrp is now fully operational.  If something fails after this
@@ -4833,6 +4891,7 @@ static int cgroup_destroy_locked(struct cgroup *cgrp)
 	unsigned long css_flags;
 	struct cgroup_subsys_state *css;
 	bool empty;
+	struct cgroup *ancestor;
 	int ssid;
 
 	lockdep_assert_held(&cgroup_mutex);
@@ -4860,6 +4919,18 @@ static int cgroup_destroy_locked(struct cgroup *cgrp)
 	 * creation by disabling cgroup_lock_live_group().
 	 */
 	cgrp->self.flags &= ~CSS_ONLINE;
+
+	spin_lock_irqsave(&css_set_lock, css_flags);
+	for (ancestor = cgroup_parent(cgrp); ancestor;
+	     ancestor = cgroup_parent(ancestor)) {
+		ancestor->nr_descendants--;
+		if (test_bit(CGRP_FROZEN, &cgrp->flags))
+			ancestor->freezer.nr_frozen_descendants--;
+	}
+	cgroup_update_frozen(cgroup_parent(cgrp));
+	cgrp->events_kn = NULL;
+	cgrp->populated_kn = NULL;
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	/* initiate massacre of all css's */
 	for_each_css(css, ssid, cgrp)
@@ -5199,6 +5270,7 @@ void cgroup_fork(struct task_struct *child)
 {
 	RCU_INIT_POINTER(child->cgroups, &init_css_set);
 	INIT_LIST_HEAD(&child->cg_list);
+	child->frozen = false;
 }
 
 /**
@@ -5248,6 +5320,11 @@ void cgroup_post_fork(struct task_struct *child)
 			list_add(&child->cg_list, &cset->tasks);
 			get_css_set(cset);
 			cset->nr_tasks++;
+		}
+		if (unlikely(cgroup_task_freeze(child))) {
+			spin_lock(&child->sighand->siglock);
+			child->jobctl |= JOBCTL_TRAP_FREEZE;
+			spin_unlock(&child->sighand->siglock);
 		}
 		spin_unlock_irqrestore(&css_set_lock, css_flags);
 	}
@@ -5300,6 +5377,10 @@ void cgroup_exit(struct task_struct *tsk)
 		css_task_iter_skip(task_css_set(tsk), tsk);
 		list_del_init(&tsk->cg_list);
 		task_css_set(tsk)->nr_tasks--;
+		if (unlikely(cgroup_task_frozen(tsk)))
+			cgroup_freezer_frozen_exit(tsk);
+		else if (unlikely(cgroup_task_freeze(tsk)))
+			cgroup_update_frozen(task_dfl_cgroup(tsk));
 		spin_unlock_irqrestore(&css_set_lock, css_flags);
 		put_cset = true;
 	}

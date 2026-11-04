@@ -584,4 +584,52 @@ static inline void cgroup_sk_free(struct sock_cgroup_data *skcd) {}
 
 #endif	/* CONFIG_CGROUP_DATA */
 
+#ifdef CONFIG_CGROUPS
+
+static inline struct cgroup *task_dfl_cgroup(struct task_struct *task)
+{
+	return task_css_set(task)->dfl_cgrp;
+}
+
+void cgroup_enter_frozen(void);
+void cgroup_leave_frozen(bool always_leave);
+void cgroup_update_frozen(struct cgroup *cgrp);
+void cgroup_freeze(struct cgroup *cgrp, bool freeze);
+void cgroup_freezer_migrate_task(struct task_struct *task, struct cgroup *src,
+				 struct cgroup *dst);
+void cgroup_freezer_frozen_exit(struct task_struct *task);
+static inline bool cgroup_task_freeze(struct task_struct *task)
+{
+	bool ret;
+
+	if (task->flags & PF_KTHREAD)
+		return false;
+
+	rcu_read_lock();
+	ret = test_bit(CGRP_FREEZE, &task_dfl_cgroup(task)->flags);
+	rcu_read_unlock();
+
+	return ret;
+}
+
+static inline bool cgroup_task_frozen(struct task_struct *task)
+{
+	return task->frozen;
+}
+
+#else /* !CONFIG_CGROUPS */
+
+static inline void cgroup_enter_frozen(void) { }
+static inline void cgroup_leave_frozen(bool always_leave) { }
+static inline bool cgroup_task_freeze(struct task_struct *task)
+{
+	return false;
+}
+static inline bool cgroup_task_frozen(struct task_struct *task)
+{
+	return false;
+}
+
+#endif /* !CONFIG_CGROUPS */
+
 #endif /* _LINUX_CGROUP_H */

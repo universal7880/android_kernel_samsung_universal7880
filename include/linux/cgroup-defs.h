@@ -98,6 +98,18 @@ enum {
 	 * specified at mount time and thus is implemented here.
 	 */
 	CGRP_CPUSET_CLONE_CHILDREN,
+	CGRP_FREEZE,		/* tasks must enter the freezer */
+	CGRP_FROZEN,		/* all tasks and descendants are frozen */
+};
+
+struct cgroup_freezer_state {
+	/* Requested state and inherited requests; protected by cgroup_mutex. */
+	bool freeze;
+	int e_freeze;
+
+	/* Protected by css_set_lock. */
+	int nr_frozen_descendants;
+	int nr_frozen_tasks;
 };
 
 struct cgroup {
@@ -123,6 +135,10 @@ struct cgroup {
 	 * in this cgroup or its subtree.
 	 */
 	int populated_cnt;
+
+	/* Live descendants, protected by css_set_lock. */
+	int nr_descendants;
+	struct cgroup_freezer_state freezer;
 
 	struct kernfs_node *kn;		/* cgroup kernfs entry */
 	struct kernfs_node *populated_kn; /* kn for "cgroup.populated" */
