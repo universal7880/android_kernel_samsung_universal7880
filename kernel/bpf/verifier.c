@@ -851,7 +851,6 @@ static bool may_access_direct_pkt_data(struct bpf_verifier_env *env,
 	switch (env->prog->type) {
 	case BPF_PROG_TYPE_SCHED_CLS:
 	case BPF_PROG_TYPE_SCHED_ACT:
-	case BPF_PROG_TYPE_XDP:
 		if (meta)
 			return meta->pkt_access;
 

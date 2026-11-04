@@ -2545,7 +2545,8 @@ bpf_base_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_ktime_get_boot_ns:
 		return &bpf_ktime_get_boot_ns_proto;
 	case BPF_FUNC_trace_printk:
-		return capable(CAP_SYS_ADMIN) ? bpf_get_trace_printk_proto() : NULL;
+		return IS_ENABLED(CONFIG_BPF_EVENTS) && capable(CAP_SYS_ADMIN) ?
+			bpf_get_trace_printk_proto() : NULL;
 	default:
 		return NULL;
 	}
@@ -2681,7 +2682,8 @@ tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_set_hash_invalid:
 		return &bpf_set_hash_invalid_proto;
 	case BPF_FUNC_perf_event_output:
-		return &bpf_skb_event_output_proto;
+		return IS_ENABLED(CONFIG_BPF_EVENTS) ?
+			&bpf_skb_event_output_proto : NULL;
 	case BPF_FUNC_get_smp_processor_id:
 		return &bpf_get_smp_processor_id_proto;
 	case BPF_FUNC_skb_under_cgroup:
