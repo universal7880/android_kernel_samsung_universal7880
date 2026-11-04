@@ -5197,9 +5197,10 @@ int proc_cgroup_show(struct seq_file *m, struct pid_namespace *ns,
 			continue;
 
 		seq_printf(m, "%d:", root->hierarchy_id);
-		for_each_subsys(ss, ssid)
-			if (root->subsys_mask & (1 << ssid))
-				seq_printf(m, "%s%s", count++ ? "," : "", ss->name);
+		if (root != &cgrp_dfl_root)
+			for_each_subsys(ss, ssid)
+				if (root->subsys_mask & (1 << ssid))
+					seq_printf(m, "%s%s", count++ ? "," : "", ss->name);
 		if (strlen(root->name))
 			seq_printf(m, "%sname=%s", count ? "," : "",
 				   root->name);
