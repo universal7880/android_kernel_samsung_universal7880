@@ -83,4 +83,7 @@
 #define SO_ATTACH_BPF		0x402B
 #define SO_DETACH_BPF		SO_DETACH_FILTER
 
+
+#define SO_COOKIE		0x4032
+
 #endif /* _UAPI_ASM_SOCKET_H */
