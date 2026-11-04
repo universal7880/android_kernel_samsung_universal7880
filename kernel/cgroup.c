@@ -76,7 +76,7 @@
  * cgroup_mutex is the master lock.  Any modification to cgroup or its
  * hierarchy must be performed while holding it.
  *
- * css_set_rwsem protects task->cgroups pointer, the list of css_set
+ * css_set_lock protects task->cgroups pointer, the list of css_set
  * objects, and the chain of tasks off each css_set.
  *
  * These locks are exported if CONFIG_PROVE_RCU so that accessors in
@@ -84,12 +84,12 @@
  */
 #ifdef CONFIG_PROVE_RCU
 DEFINE_MUTEX(cgroup_mutex);
-DECLARE_RWSEM(css_set_rwsem);
+DEFINE_SPINLOCK(css_set_lock);
 EXPORT_SYMBOL_GPL(cgroup_mutex);
-EXPORT_SYMBOL_GPL(css_set_rwsem);
+EXPORT_SYMBOL_GPL(css_set_lock);
 #else
 static DEFINE_MUTEX(cgroup_mutex);
-static DECLARE_RWSEM(css_set_rwsem);
+static DEFINE_SPINLOCK(css_set_lock);
 #endif
 
 /*
@@ -439,7 +439,7 @@ static int css_set_count	= 1;	/* 1 for init_css_set */
  */
 static void cgroup_update_populated(struct cgroup *cgrp, bool populated)
 {
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 
 	do {
 		bool trigger;
@@ -487,7 +487,7 @@ static void put_css_set_locked(struct css_set *cset)
 	struct cgroup_subsys *ss;
 	int ssid;
 
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 
 	if (!atomic_dec_and_test(&cset->refcount))
 		return;
@@ -504,7 +504,7 @@ static void put_css_set_locked(struct css_set *cset)
 		list_del(&link->cset_link);
 		list_del(&link->cgrp_link);
 
-		/* @cgrp can't go away while we're holding css_set_rwsem */
+		/* @cgrp can't go away while we're holding css_set_lock */
 		if (list_empty(&cgrp->cset_links)) {
 			cgroup_update_populated(cgrp, false);
 			check_for_release(cgrp);
@@ -518,17 +518,15 @@ static void put_css_set_locked(struct css_set *cset)
 
 static void put_css_set(struct css_set *cset)
 {
-	/*
-	 * Ensure that the refcount doesn't hit zero while any readers
-	 * can see it. Similar to atomic_dec_and_lock(), but for an
-	 * rwlock
-	 */
+	unsigned long css_flags;
+
+	/* Keep the final reference release under css_set_lock. */
 	if (atomic_add_unless(&cset->refcount, -1, 1))
 		return;
 
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	put_css_set_locked(cset);
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 }
 
 /*
@@ -739,6 +737,7 @@ static void link_css_set(struct list_head *tmp_links, struct css_set *cset,
 static struct css_set *find_css_set(struct css_set *old_cset,
 				    struct cgroup *cgrp)
 {
+	unsigned long css_flags;
 	struct cgroup_subsys_state *template[CGROUP_SUBSYS_COUNT] = { };
 	struct css_set *cset;
 	struct list_head tmp_links;
@@ -751,11 +750,11 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 
 	/* First see if we already have a cgroup group that matches
 	 * the desired set */
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	cset = find_existing_css_set(old_cset, cgrp, template);
 	if (cset)
 		get_css_set(cset);
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	if (cset)
 		return cset;
@@ -783,7 +782,7 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 	 * find_existing_css_set() */
 	memcpy(cset->subsys, template, sizeof(cset->subsys));
 
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	/* Add reference counts and links from the new css_set. */
 	list_for_each_entry(link, &old_cset->cgrp_links, cgrp_link) {
 		struct cgroup *c = link->cgrp;
@@ -805,7 +804,7 @@ static struct css_set *find_css_set(struct css_set *old_cset,
 		list_add_tail(&cset->e_cset_node[ssid],
 			      &cset->subsys[ssid]->cgroup->e_csets[ssid]);
 
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	return cset;
 }
@@ -854,6 +853,7 @@ static void cgroup_free_root(struct cgroup_root *root)
 
 static void cgroup_destroy_root(struct cgroup_root *root)
 {
+	unsigned long css_flags;
 	struct cgroup *cgrp = &root->cgrp;
 	struct cgrp_cset_link *link, *tmp_link;
 
@@ -869,14 +869,14 @@ static void cgroup_destroy_root(struct cgroup_root *root)
 	 * Release all the links from cset_links to this hierarchy's
 	 * root cgroup
 	 */
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 
 	list_for_each_entry_safe(link, tmp_link, &cgrp->cset_links, cset_link) {
 		list_del(&link->cset_link);
 		list_del(&link->cgrp_link);
 		kfree(link);
 	}
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	if (!list_empty(&root->root_list)) {
 		list_del(&root->root_list);
@@ -898,7 +898,7 @@ static struct cgroup *cset_cgroup_from_root(struct css_set *cset,
 	struct cgroup *res = NULL;
 
 	lockdep_assert_held(&cgroup_mutex);
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 
 	if (cset == &init_css_set) {
 		res = &root->cgrp;
@@ -921,7 +921,7 @@ static struct cgroup *cset_cgroup_from_root(struct css_set *cset,
 
 /*
  * Return the cgroup for "task" from the given hierarchy. Must be
- * called with cgroup_mutex and css_set_rwsem held.
+ * called with cgroup_mutex and css_set_lock held.
  */
 static struct cgroup *task_cgroup_from_root(struct task_struct *task,
 					    struct cgroup_root *root)
@@ -1163,6 +1163,7 @@ static void cgroup_clear_dir(struct cgroup *cgrp, unsigned int subsys_mask)
 
 static int rebind_subsystems(struct cgroup_root *dst_root, unsigned int ss_mask)
 {
+	unsigned long css_flags;
 	struct cgroup_subsys *ss;
 	unsigned int tmp_ss_mask;
 	int ssid, i, ret;
@@ -1231,11 +1232,11 @@ static int rebind_subsystems(struct cgroup_root *dst_root, unsigned int ss_mask)
 		ss->root = dst_root;
 		css->cgroup = &dst_root->cgrp;
 
-		down_write(&css_set_rwsem);
+		spin_lock_irqsave(&css_set_lock, css_flags);
 		hash_for_each(css_set_table, i, cset, hlist)
 			list_move_tail(&cset->e_cset_node[ss->id],
 				       &dst_root->cgrp.e_csets[ss->id]);
-		up_write(&css_set_rwsem);
+		spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 		src_root->subsys_mask &= ~(1 << ssid);
 		src_root->cgrp.subtree_control &= ~(1 << ssid);
@@ -1505,9 +1506,11 @@ static bool use_task_css_set_links __read_mostly;
 
 static void cgroup_enable_task_cg_lists(void)
 {
+	unsigned long css_flags;
 	struct task_struct *p, *g;
 
-	down_write(&css_set_rwsem);
+	read_lock(&tasklist_lock);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 
 	if (use_task_css_set_links)
 		goto out_unlock;
@@ -1521,7 +1524,6 @@ static void cgroup_enable_task_cg_lists(void)
 	 * is not guaranteed to have its child immediately visible in the
 	 * tasklist if we walk through it with RCU.
 	 */
-	read_lock(&tasklist_lock);
 	do_each_thread(g, p) {
 		WARN_ON_ONCE(!list_empty(&p->cg_list) ||
 			     task_css_set(p) != &init_css_set);
@@ -1533,18 +1535,18 @@ static void cgroup_enable_task_cg_lists(void)
 		 * Do it while holding siglock so that we don't end up
 		 * racing against cgroup_exit().
 		 */
-		spin_lock_irq(&p->sighand->siglock);
+		spin_lock(&p->sighand->siglock);
 		if (!(p->flags & PF_EXITING)) {
 			struct css_set *cset = task_css_set(p);
 
 			list_add(&p->cg_list, &cset->tasks);
 			get_css_set(cset);
 		}
-		spin_unlock_irq(&p->sighand->siglock);
+		spin_unlock(&p->sighand->siglock);
 	} while_each_thread(g, p);
-	read_unlock(&tasklist_lock);
 out_unlock:
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
+	read_unlock(&tasklist_lock);
 }
 
 static void init_cgroup_housekeeping(struct cgroup *cgrp)
@@ -1591,6 +1593,7 @@ static void init_cgroup_root(struct cgroup_root *root,
 
 static int cgroup_setup_root(struct cgroup_root *root, unsigned int ss_mask)
 {
+	unsigned long css_flags;
 	LIST_HEAD(tmp_links);
 	struct cgroup *root_cgrp = &root->cgrp;
 	struct cftype *base_files;
@@ -1610,7 +1613,7 @@ static int cgroup_setup_root(struct cgroup_root *root, unsigned int ss_mask)
 		goto out;
 
 	/*
-	 * We're accessing css_set_count without locking css_set_rwsem here,
+	 * We're accessing css_set_count without locking css_set_lock here,
 	 * but that's OK - it can only be increased by someone holding
 	 * cgroup_lock, and that's us. The worst that can happen is that we
 	 * have some link structures left over
@@ -1657,10 +1660,10 @@ static int cgroup_setup_root(struct cgroup_root *root, unsigned int ss_mask)
 	 * Link the root cgroup in this hierarchy into all the css_set
 	 * objects.
 	 */
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	hash_for_each(css_set_table, i, cset, hlist)
 		link_css_set(&tmp_links, cset, root_cgrp);
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	BUG_ON(!list_empty(&root_cgrp->self.children));
 	BUG_ON(atomic_read(&root->nr_cgrps) != 1);
@@ -1909,13 +1912,14 @@ static struct kobject *cgroup_kobj;
  */
 char *task_cgroup_path(struct task_struct *task, char *buf, size_t buflen)
 {
+	unsigned long css_flags;
 	struct cgroup_root *root;
 	struct cgroup *cgrp;
 	int hierarchy_id = 1;
 	char *path = NULL;
 
 	mutex_lock(&cgroup_mutex);
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 
 	root = idr_get_next(&cgroup_hierarchy_idr, &hierarchy_id);
 
@@ -1928,7 +1932,7 @@ char *task_cgroup_path(struct task_struct *task, char *buf, size_t buflen)
 			path = buf;
 	}
 
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	mutex_unlock(&cgroup_mutex);
 	return path;
 }
@@ -2007,7 +2011,7 @@ static void css_task_iter_skip(struct css_set *cset, struct task_struct *task)
 {
 	struct css_task_iter *it, *pos;
 
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 	list_for_each_entry_safe(it, pos, &cset->task_iters, iters_node)
 		if (it->task_pos == &task->cg_list)
 			css_task_iter_advance(it);
@@ -2019,7 +2023,7 @@ static void css_task_iter_skip(struct css_set *cset, struct task_struct *task)
  * @tsk: the task being migrated
  * @new_cset: the new css_set @tsk is being attached to
  *
- * Must be called with cgroup_mutex, threadgroup and css_set_rwsem locked.
+ * Must be called with cgroup_mutex, threadgroup and css_set_lock locked.
  */
 static void cgroup_task_migrate(struct cgroup *old_cgrp,
 				struct task_struct *tsk,
@@ -2028,7 +2032,7 @@ static void cgroup_task_migrate(struct cgroup *old_cgrp,
 	struct css_set *old_cset;
 
 	lockdep_assert_held(&cgroup_mutex);
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 
 	/*
 	 * We are synchronized through threadgroup_lock() against PF_EXITING
@@ -2067,18 +2071,19 @@ static void cgroup_task_migrate(struct cgroup *old_cgrp,
  */
 static void cgroup_migrate_finish(struct list_head *preloaded_csets)
 {
+	unsigned long css_flags;
 	struct css_set *cset, *tmp_cset;
 
 	lockdep_assert_held(&cgroup_mutex);
 
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	list_for_each_entry_safe(cset, tmp_cset, preloaded_csets, mg_preload_node) {
 		cset->mg_src_cgrp = NULL;
 		cset->mg_dst_cset = NULL;
 		list_del_init(&cset->mg_preload_node);
 		put_css_set_locked(cset);
 	}
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 }
 
 /**
@@ -2103,7 +2108,7 @@ static void cgroup_migrate_add_src(struct css_set *src_cset,
 	struct cgroup *src_cgrp;
 
 	lockdep_assert_held(&cgroup_mutex);
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 
 	src_cgrp = cset_cgroup_from_root(src_cset, dst_cgrp->root);
 
@@ -2211,6 +2216,7 @@ err:
 static int cgroup_migrate(struct cgroup *cgrp, struct task_struct *leader,
 			  bool threadgroup)
 {
+	unsigned long css_flags;
 	struct cgroup_taskset tset = {
 		.src_csets	= LIST_HEAD_INIT(tset.src_csets),
 		.dst_csets	= LIST_HEAD_INIT(tset.dst_csets),
@@ -2226,7 +2232,7 @@ static int cgroup_migrate(struct cgroup *cgrp, struct task_struct *leader,
 	 * already PF_EXITING could be freed from underneath us unless we
 	 * take an rcu_read_lock.
 	 */
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	rcu_read_lock();
 	task = leader;
 	do {
@@ -2258,7 +2264,7 @@ static int cgroup_migrate(struct cgroup *cgrp, struct task_struct *leader,
 			break;
 	} while_each_thread(leader, task);
 	rcu_read_unlock();
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	/* methods shouldn't be called if no task is actually migrating */
 	if (list_empty(&tset.src_csets))
@@ -2280,13 +2286,13 @@ static int cgroup_migrate(struct cgroup *cgrp, struct task_struct *leader,
 	 * the new cgroup.  There are no failure cases after here, so this
 	 * is the commit point.
 	 */
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	list_for_each_entry(cset, &tset.src_csets, mg_node) {
 		list_for_each_entry_safe(task, tmp_task, &cset->mg_tasks, cg_list)
 			cgroup_task_migrate(cset->mg_src_cgrp, task,
 					    cset->mg_dst_cset);
 	}
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	/*
 	 * Migration is committed, all target tasks are now on dst_csets.
@@ -2310,13 +2316,13 @@ out_cancel_attach:
 			css->ss->cancel_attach(css, &tset);
 	}
 out_release_tset:
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	list_splice_init(&tset.dst_csets, &tset.src_csets);
 	list_for_each_entry_safe(cset, tmp_cset, &tset.src_csets, mg_node) {
 		list_splice_tail_init(&cset->mg_tasks, &cset->tasks);
 		list_del_init(&cset->mg_node);
 	}
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	return ret;
 }
 
@@ -2331,12 +2337,13 @@ out_release_tset:
 static int cgroup_attach_task(struct cgroup *dst_cgrp,
 			      struct task_struct *leader, bool threadgroup)
 {
+	unsigned long css_flags;
 	LIST_HEAD(preloaded_csets);
 	struct task_struct *task;
 	int ret;
 
 	/* look up all src csets */
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	rcu_read_lock();
 	task = leader;
 	do {
@@ -2346,7 +2353,7 @@ static int cgroup_attach_task(struct cgroup *dst_cgrp,
 			break;
 	} while_each_thread(leader, task);
 	rcu_read_unlock();
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	/* prepare dst csets and commit */
 	ret = cgroup_migrate_prepare_dst(dst_cgrp, &preloaded_csets);
@@ -2453,6 +2460,7 @@ out_unlock_cgroup:
  */
 int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 {
+	unsigned long css_flags;
 	struct cgroup_root *root;
 	int retval = 0;
 
@@ -2463,9 +2471,9 @@ int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 		if (root == &cgrp_dfl_root)
 			continue;
 
-		down_read(&css_set_rwsem);
+		spin_lock_irqsave(&css_set_lock, css_flags);
 		from_cgrp = task_cgroup_from_root(from, root);
-		up_read(&css_set_rwsem);
+		spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 		retval = cgroup_attach_task(from_cgrp, tsk, false);
 		if (retval)
@@ -2581,6 +2589,7 @@ static int cgroup_subtree_control_show(struct seq_file *seq, void *v)
  */
 static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 {
+	unsigned long css_flags;
 	LIST_HEAD(preloaded_csets);
 	struct cgroup_subsys_state *css;
 	struct css_set *src_cset;
@@ -2589,7 +2598,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	lockdep_assert_held(&cgroup_mutex);
 
 	/* look up all csses currently attached to @cgrp's subtree */
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	css_for_each_descendant_pre(css, cgroup_css(cgrp, NULL)) {
 		struct cgrp_cset_link *link;
 
@@ -2601,7 +2610,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 			cgroup_migrate_add_src(link->cset, cgrp,
 					       &preloaded_csets);
 	}
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	/* NULL dst indicates self on default hierarchy */
 	ret = cgroup_migrate_prepare_dst(NULL, &preloaded_csets);
@@ -2624,7 +2633,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 		 * hierarchy enforces per-process membership.
 		 */
 		while (true) {
-			down_read(&css_set_rwsem);
+			spin_lock_irqsave(&css_set_lock, css_flags);
 			task = list_first_entry_or_null(&src_cset->tasks,
 						struct task_struct, cg_list);
 			if (task) {
@@ -2632,7 +2641,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 				WARN_ON_ONCE(!task_css_set(task)->mg_src_cgrp);
 				get_task_struct(task);
 			}
-			up_read(&css_set_rwsem);
+			spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 			if (!task)
 				break;
@@ -3316,13 +3325,14 @@ int cgroup_add_legacy_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
  */
 static int cgroup_task_count(const struct cgroup *cgrp)
 {
+	unsigned long css_flags;
 	int count = 0;
 	struct cgrp_cset_link *link;
 
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	list_for_each_entry(link, &cgrp->cset_links, cset_link)
 		count += atomic_read(&link->cset->refcount);
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	return count;
 }
 
@@ -3555,7 +3565,7 @@ bool css_has_online_children(struct cgroup_subsys_state *css)
 
 /**
  * css_task_iter_advance_css_set - move to the next non-empty css_set
- * @it: iterator protected by css_set_rwsem
+ * @it: iterator protected by css_set_lock
  */
 static void css_task_iter_advance_css_set(struct css_task_iter *it)
 {
@@ -3563,7 +3573,7 @@ static void css_task_iter_advance_css_set(struct css_task_iter *it)
 	struct cgrp_cset_link *link;
 	struct css_set *cset;
 
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 	do {
 		l = l->next;
 		if (l == it->cset_head) {
@@ -3600,7 +3610,7 @@ static void css_task_iter_advance(struct css_task_iter *it)
 {
 	struct list_head *l = it->task_pos;
 
-	lockdep_assert_held(&css_set_rwsem);
+	lockdep_assert_held(&css_set_lock);
 	WARN_ON_ONCE(!l);
 	l = l->next;
 	if (l == it->tasks_head)
@@ -3621,9 +3631,10 @@ static void css_task_iter_advance(struct css_task_iter *it)
 void css_task_iter_start(struct cgroup_subsys_state *css,
 			 struct css_task_iter *it)
 {
+	unsigned long css_flags;
 	WARN_ON_ONCE(!use_task_css_set_links);
 	memset(it, 0, sizeof(*it));
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	it->ss = css->ss;
 	if (it->ss)
 		it->cset_pos = &css->cgroup->e_csets[it->ss->id];
@@ -3631,7 +3642,7 @@ void css_task_iter_start(struct cgroup_subsys_state *css,
 		it->cset_pos = &css->cgroup->cset_links;
 	it->cset_head = it->cset_pos;
 	css_task_iter_advance_css_set(it);
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 }
 
 /**
@@ -3640,29 +3651,31 @@ void css_task_iter_start(struct cgroup_subsys_state *css,
  */
 struct task_struct *css_task_iter_next(struct css_task_iter *it)
 {
+	unsigned long css_flags;
 	if (it->cur_task) {
 		put_task_struct(it->cur_task);
 		it->cur_task = NULL;
 	}
 
-	down_write(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	if (it->task_pos) {
 		it->cur_task = list_entry(it->task_pos, struct task_struct,
 					  cg_list);
 		get_task_struct(it->cur_task);
 		css_task_iter_advance(it);
 	}
-	up_write(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	return it->cur_task;
 }
 
 void css_task_iter_end(struct css_task_iter *it)
 {
+	unsigned long css_flags;
 	if (it->cur_cset) {
-		down_write(&css_set_rwsem);
+		spin_lock_irqsave(&css_set_lock, css_flags);
 		list_del(&it->iters_node);
 		put_css_set_locked(it->cur_cset);
-		up_write(&css_set_rwsem);
+		spin_unlock_irqrestore(&css_set_lock, css_flags);
 	}
 	if (it->cur_task)
 		put_task_struct(it->cur_task);
@@ -3681,6 +3694,7 @@ void css_task_iter_end(struct css_task_iter *it)
  */
 int cgroup_transfer_tasks(struct cgroup *to, struct cgroup *from)
 {
+	unsigned long css_flags;
 	LIST_HEAD(preloaded_csets);
 	struct cgrp_cset_link *link;
 	struct css_task_iter it;
@@ -3690,10 +3704,10 @@ int cgroup_transfer_tasks(struct cgroup *to, struct cgroup *from)
 	mutex_lock(&cgroup_mutex);
 
 	/* all tasks in @from are being moved, all csets are source */
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	list_for_each_entry(link, &from->cset_links, cset_link)
 		cgroup_migrate_add_src(link->cset, to, &preloaded_csets);
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 
 	ret = cgroup_migrate_prepare_dst(to, &preloaded_csets);
 	if (ret)
@@ -4804,6 +4818,7 @@ static void kill_css(struct cgroup_subsys_state *css)
 static int cgroup_destroy_locked(struct cgroup *cgrp)
 	__releases(&cgroup_mutex) __acquires(&cgroup_mutex)
 {
+	unsigned long css_flags;
 	struct cgroup_subsys_state *css;
 	bool empty;
 	int ssid;
@@ -4811,12 +4826,12 @@ static int cgroup_destroy_locked(struct cgroup *cgrp)
 	lockdep_assert_held(&cgroup_mutex);
 
 	/*
-	 * css_set_rwsem synchronizes access to ->cset_links and prevents
+	 * css_set_lock synchronizes access to ->cset_links and prevents
 	 * @cgrp from being removed while put_css_set() is in progress.
 	 */
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	empty = list_empty(&cgrp->cset_links);
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	if (!empty)
 		return -EBUSY;
 
@@ -5077,6 +5092,7 @@ core_initcall(cgroup_wq_init);
 int proc_cgroup_show(struct seq_file *m, struct pid_namespace *ns,
 		     struct pid *pid, struct task_struct *tsk)
 {
+	unsigned long css_flags;
 	char *buf, *path;
 	int retval;
 	struct cgroup_root *root;
@@ -5087,7 +5103,7 @@ int proc_cgroup_show(struct seq_file *m, struct pid_namespace *ns,
 		goto out;
 
 	mutex_lock(&cgroup_mutex);
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 
 	for_each_root(root) {
 		struct cgroup_subsys *ss;
@@ -5117,7 +5133,7 @@ int proc_cgroup_show(struct seq_file *m, struct pid_namespace *ns,
 
 	retval = 0;
 out_unlock:
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	mutex_unlock(&cgroup_mutex);
 	kfree(buf);
 out:
@@ -5185,6 +5201,7 @@ void cgroup_fork(struct task_struct *child)
  */
 void cgroup_post_fork(struct task_struct *child)
 {
+	unsigned long css_flags;
 	struct cgroup_subsys *ss;
 	int i;
 
@@ -5197,7 +5214,7 @@ void cgroup_post_fork(struct task_struct *child)
 	 * @child during its iteration.
 	 *
 	 * If we won the race, @child is associated with %current's
-	 * css_set.  Grabbing css_set_rwsem guarantees both that the
+	 * css_set.  Grabbing css_set_lock guarantees both that the
 	 * association is stable, and, on completion of the parent's
 	 * migration, @child is visible in the source of migration or
 	 * already in the destination cgroup.  This guarantee is necessary
@@ -5212,14 +5229,14 @@ void cgroup_post_fork(struct task_struct *child)
 	if (use_task_css_set_links) {
 		struct css_set *cset;
 
-		down_write(&css_set_rwsem);
+		spin_lock_irqsave(&css_set_lock, css_flags);
 		cset = task_css_set(current);
 		if (list_empty(&child->cg_list)) {
 			rcu_assign_pointer(child->cgroups, cset);
 			list_add(&child->cg_list, &cset->tasks);
 			get_css_set(cset);
 		}
-		up_write(&css_set_rwsem);
+		spin_unlock_irqrestore(&css_set_lock, css_flags);
 	}
 
 	/*
@@ -5255,6 +5272,7 @@ void cgroup_post_fork(struct task_struct *child)
  */
 void cgroup_exit(struct task_struct *tsk)
 {
+	unsigned long css_flags;
 	struct cgroup_subsys *ss;
 	struct css_set *cset;
 	bool put_cset = false;
@@ -5262,13 +5280,13 @@ void cgroup_exit(struct task_struct *tsk)
 
 	/*
 	 * Unlink from @tsk from its css_set.  As migration path can't race
-	 * with us, we can check cg_list without grabbing css_set_rwsem.
+	 * with us, we can check cg_list without grabbing css_set_lock.
 	 */
 	if (!list_empty(&tsk->cg_list)) {
-		down_write(&css_set_rwsem);
+		spin_lock_irqsave(&css_set_lock, css_flags);
 		css_task_iter_skip(task_css_set(tsk), tsk);
 		list_del_init(&tsk->cg_list);
-		up_write(&css_set_rwsem);
+		spin_unlock_irqrestore(&css_set_lock, css_flags);
 		put_cset = true;
 	}
 
@@ -5591,6 +5609,7 @@ static u64 current_css_set_refcount_read(struct cgroup_subsys_state *css,
 
 static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
 {
+	unsigned long css_flags;
 	struct cgrp_cset_link *link;
 	struct css_set *cset;
 	char *name_buf;
@@ -5599,7 +5618,7 @@ static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
 	if (!name_buf)
 		return -ENOMEM;
 
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	rcu_read_lock();
 	cset = rcu_dereference(current->cgroups);
 	list_for_each_entry(link, &cset->cgrp_links, cgrp_link) {
@@ -5610,7 +5629,7 @@ static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
 			   c->root->hierarchy_id, name_buf);
 	}
 	rcu_read_unlock();
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	kfree(name_buf);
 	return 0;
 }
@@ -5618,10 +5637,11 @@ static int current_css_set_cg_links_read(struct seq_file *seq, void *v)
 #define MAX_TASKS_SHOWN_PER_CSS 25
 static int cgroup_css_links_read(struct seq_file *seq, void *v)
 {
+	unsigned long css_flags;
 	struct cgroup_subsys_state *css = seq_css(seq);
 	struct cgrp_cset_link *link;
 
-	down_read(&css_set_rwsem);
+	spin_lock_irqsave(&css_set_lock, css_flags);
 	list_for_each_entry(link, &css->cgroup->cset_links, cset_link) {
 		struct css_set *cset = link->cset;
 		struct task_struct *task;
@@ -5644,7 +5664,7 @@ static int cgroup_css_links_read(struct seq_file *seq, void *v)
 	overflow:
 		seq_puts(seq, "  ...\n");
 	}
-	up_read(&css_set_rwsem);
+	spin_unlock_irqrestore(&css_set_lock, css_flags);
 	return 0;
 }
 

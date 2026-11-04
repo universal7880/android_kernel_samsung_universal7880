@@ -14,7 +14,7 @@
 #include <linux/rcupdate.h>
 #include <linux/rculist.h>
 #include <linux/cgroupstats.h>
-#include <linux/rwsem.h>
+#include <linux/spinlock.h>
 #include <linux/idr.h>
 #include <linux/workqueue.h>
 #include <linux/fs.h>
@@ -273,11 +273,11 @@ struct task_struct *cgroup_taskset_next(struct cgroup_taskset *tset);
  */
 #ifdef CONFIG_PROVE_RCU
 extern struct mutex cgroup_mutex;
-extern struct rw_semaphore css_set_rwsem;
+extern spinlock_t css_set_lock;
 #define task_css_set_check(task, __c)					\
 	rcu_dereference_check((task)->cgroups,				\
 		lockdep_is_held(&cgroup_mutex) ||			\
-		lockdep_is_held(&css_set_rwsem) ||			\
+		lockdep_is_held(&css_set_lock) ||			\
 		((task)->flags & PF_EXITING) || (__c))
 #else
 #define task_css_set_check(task, __c)					\
