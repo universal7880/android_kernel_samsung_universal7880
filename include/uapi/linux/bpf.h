@@ -111,6 +111,7 @@ enum bpf_map_type {
 	BPF_MAP_TYPE_LPM_TRIE,
 	BPF_MAP_TYPE_ARRAY_OF_MAPS,
 	BPF_MAP_TYPE_HASH_OF_MAPS,
+	BPF_MAP_TYPE_DEVMAP = 14, /* Reserved; not implemented. */
 };
 
 enum bpf_prog_type {
@@ -504,8 +505,8 @@ enum bpf_func_id {
 	 * Return: current
 	 */
 	BPF_FUNC_get_current_task,
-	BPF_FUNC_probe_write_user,
-	BPF_FUNC_current_task_under_cgroup,
+	BPF_FUNC_probe_write_user, /* Reserved; not implemented. */
+	BPF_FUNC_current_task_under_cgroup, /* Reserved; not implemented. */
 
 	/**
 	 * bpf_skb_change_tail(skb, len, flags)
@@ -545,6 +546,7 @@ enum bpf_func_id {
 	 * @skb: pointer to skb
 	 */
 	BPF_FUNC_set_hash_invalid = 41,
+	BPF_FUNC_get_numa_node_id = 42, /* Reserved; not implemented. */
 
 	/* Grow the MAC header area; flags must be zero. */
 	BPF_FUNC_skb_change_head = 43,
