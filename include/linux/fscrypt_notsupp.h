@@ -68,6 +68,15 @@ static inline void fscrypt_restore_control_page(struct page *page)
 }
 
 /* policy.c */
+static inline void fscrypt_sb_free(struct super_block *sb)
+{
+}
+
+static inline int fscrypt_drop_inode(struct inode *inode)
+{
+	return 0;
+}
+
 static inline int fscrypt_ioctl_set_policy(struct file *filp,
 					   const void __user *arg)
 {

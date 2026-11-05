@@ -846,6 +846,7 @@ static void ext4_put_super(struct super_block *sb)
 	int aborted = 0;
 	int i, err;
 
+	fscrypt_sb_free(sb);
 	ext4_unregister_li_request(sb);
 	dquot_disable(sb, -1, DQUOT_USAGE_ENABLED | DQUOT_LIMITS_ENABLED);
 
@@ -990,7 +991,7 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 
 static int ext4_drop_inode(struct inode *inode)
 {
-	int drop = generic_drop_inode(inode);
+	int drop = generic_drop_inode(inode) || fscrypt_drop_inode(inode);
 
 	trace_ext4_drop_inode(inode, drop);
 	return drop;
@@ -1250,6 +1251,7 @@ static const struct fscrypt_operations ext4_cryptops = {
 	.dummy_context	= ext4_dummy_context,
 	.empty_dir	= ext4_empty_dir,
 	.max_namelen	= EXT4_NAME_LEN,
+	.supports_v2	= true,
 };
 #endif
 

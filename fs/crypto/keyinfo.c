@@ -26,7 +26,7 @@ static struct crypto_shash *essiv_hash_tfm;
  * key is longer, then only the first 'derived_keysize' bytes are used.
  */
 static int derive_key_aes(const u8 *master_key,
-			  const struct fscrypt_context *ctx,
+			  const struct fscrypt_context_v1 *ctx,
 			  u8 *derived_key, unsigned int derived_keysize)
 {
 	int res = 0;
@@ -136,7 +136,7 @@ invalid:
 
 /* Find the master key, then derive the inode's actual encryption key */
 static int find_and_derive_key(const struct inode *inode,
-			       const struct fscrypt_context *ctx,
+			       const struct fscrypt_context_v1 *ctx,
 			       u8 *derived_key, unsigned int derived_keysize)
 {
 	struct key *key;
@@ -219,6 +219,58 @@ select_encryption_mode(const struct fscrypt_info *ci, const struct inode *inode)
 	return ERR_PTR(-EINVAL);
 }
 
+/*
+ * Keep the master key's secret read-locked until the inode is tracked.
+ * Removal must either prevent setup or find the inode when evicting keys.
+ */
+static int derive_inode_key(struct inode *inode, const union fscrypt_context *ctx,
+			    u8 *raw_key, unsigned int keysize,
+			    struct key **master_key_ret)
+{
+	struct fscrypt_key_specifier spec = {};
+	struct fscrypt_master_key *mk;
+	struct key *key;
+	int err;
+
+	if (ctx->format == FS_ENCRYPTION_CONTEXT_FORMAT_V2) {
+		spec.type = FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER;
+		memcpy(spec.u.identifier, ctx->v2.master_key_identifier,
+		       FSCRYPT_KEY_IDENTIFIER_SIZE);
+	} else {
+		spec.type = FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR;
+		memcpy(spec.u.descriptor, ctx->v1.master_key_descriptor,
+		       FS_KEY_DESCRIPTOR_SIZE);
+	}
+
+	key = fscrypt_find_master_key(inode->i_sb, &spec);
+	if (IS_ERR(key)) {
+		if (key == ERR_PTR(-ENOKEY) &&
+		    spec.type == FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR)
+			return find_and_derive_key(inode, &ctx->v1, raw_key, keysize);
+		return PTR_ERR(key);
+	}
+
+	mk = key->payload.data;
+	down_read(&mk->mk_secret_sem);
+	if (mk->mk_secret.size < keysize) {
+		err = -ENOKEY;
+	} else if (spec.type == FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
+		err = fscrypt_hkdf_expand(&mk->mk_secret.hkdf, HKDF_CONTEXT_PER_FILE_KEY,
+					 ctx->v2.nonce, sizeof(ctx->v2.nonce),
+					 raw_key, keysize);
+	} else {
+		err = derive_key_aes(mk->mk_secret.raw, &ctx->v1, raw_key, keysize);
+	}
+
+	if (err) {
+		up_read(&mk->mk_secret_sem);
+		key_put(key);
+	} else {
+		*master_key_ret = key;
+	}
+	return err;
+}
+
 static void put_crypt_info(struct fscrypt_info *ci)
 {
 	if (!ci)
@@ -226,6 +278,16 @@ static void put_crypt_info(struct fscrypt_info *ci)
 
 	crypto_free_ablkcipher(ci->ci_ctfm);
 	crypto_free_cipher(ci->ci_essiv_tfm);
+	if (ci->ci_key) {
+		struct fscrypt_master_key *mk = ci->ci_key->payload.data;
+
+		spin_lock(&mk->mk_decrypted_inodes_lock);
+		list_del(&ci->ci_master_key_link);
+		spin_unlock(&mk->mk_decrypted_inodes_lock);
+		if (atomic_dec_and_test(&mk->mk_refcount))
+			key_invalidate(ci->ci_key);
+		key_put(ci->ci_key);
+	}
 	kmem_cache_free(fscrypt_info_cachep, ci);
 }
 
@@ -299,7 +361,8 @@ void __exit fscrypt_essiv_cleanup(void)
 int fscrypt_get_encryption_info(struct inode *inode)
 {
 	struct fscrypt_info *crypt_info;
-	struct fscrypt_context ctx;
+	union fscrypt_context ctx;
+	struct key *master_key = NULL;
 	struct crypto_ablkcipher *ctfm;
 	struct fscrypt_mode *mode;
 	u8 *raw_key = NULL;
@@ -319,31 +382,42 @@ int fscrypt_get_encryption_info(struct inode *inode)
 			return res;
 		/* Fake up a context for an unencrypted directory */
 		memset(&ctx, 0, sizeof(ctx));
-		ctx.format = FS_ENCRYPTION_CONTEXT_FORMAT_V1;
-		ctx.contents_encryption_mode = FS_ENCRYPTION_MODE_AES_256_XTS;
-		ctx.filenames_encryption_mode = FS_ENCRYPTION_MODE_AES_256_CTS;
-		memset(ctx.master_key_descriptor, 0x42, FS_KEY_DESCRIPTOR_SIZE);
-	} else if (res != sizeof(ctx)) {
-		return -EINVAL;
+		ctx.v1.format = FS_ENCRYPTION_CONTEXT_FORMAT_V1;
+		ctx.v1.contents_encryption_mode = FS_ENCRYPTION_MODE_AES_256_XTS;
+		ctx.v1.filenames_encryption_mode = FS_ENCRYPTION_MODE_AES_256_CTS;
+		memset(ctx.v1.master_key_descriptor, 0x42, FS_KEY_DESCRIPTOR_SIZE);
+		res = sizeof(ctx.v1);
 	}
 
-	if (ctx.format != FS_ENCRYPTION_CONTEXT_FORMAT_V1)
-		return -EINVAL;
-
-	if (ctx.flags & ~FS_POLICY_FLAGS_VALID)
-		return -EINVAL;
-
-	crypt_info = kmem_cache_alloc(fscrypt_info_cachep, GFP_NOFS);
+	crypt_info = kmem_cache_zalloc(fscrypt_info_cachep, GFP_NOFS);
 	if (!crypt_info)
 		return -ENOMEM;
 
-	crypt_info->ci_flags = ctx.flags;
-	crypt_info->ci_data_mode = ctx.contents_encryption_mode;
-	crypt_info->ci_filename_mode = ctx.filenames_encryption_mode;
-	crypt_info->ci_ctfm = NULL;
-	crypt_info->ci_essiv_tfm = NULL;
-	memcpy(crypt_info->ci_master_key, ctx.master_key_descriptor,
-				sizeof(crypt_info->ci_master_key));
+	crypt_info->ci_inode = inode;
+	res = fscrypt_policy_from_context(&crypt_info->ci_policy, &ctx, res);
+	if (res)
+		goto out;
+
+	if (ctx.format == FS_ENCRYPTION_CONTEXT_FORMAT_V2) {
+		if (!inode->i_sb->s_cop->supports_v2 ||
+		    ctx.v2.contents_encryption_mode != FS_ENCRYPTION_MODE_AES_256_XTS ||
+		    ctx.v2.filenames_encryption_mode != FS_ENCRYPTION_MODE_AES_256_CTS) {
+			res = -EINVAL;
+			goto out;
+		}
+		crypt_info->ci_flags = ctx.v2.flags;
+		crypt_info->ci_data_mode = ctx.v2.contents_encryption_mode;
+		crypt_info->ci_filename_mode = ctx.v2.filenames_encryption_mode;
+	} else {
+		crypt_info->ci_flags = ctx.v1.flags;
+		crypt_info->ci_data_mode = ctx.v1.contents_encryption_mode;
+		crypt_info->ci_filename_mode = ctx.v1.filenames_encryption_mode;
+	}
+
+	if (crypt_info->ci_flags & ~FS_POLICY_FLAGS_VALID) {
+		res = -EINVAL;
+		goto out;
+	}
 
 	mode = select_encryption_mode(crypt_info, inode);
 	if (IS_ERR(mode)) {
@@ -360,7 +434,7 @@ int fscrypt_get_encryption_info(struct inode *inode)
 	if (!raw_key)
 		goto out;
 
-	res = find_and_derive_key(inode, &ctx, raw_key, mode->keysize);
+	res = derive_inode_key(inode, &ctx, raw_key, mode->keysize, &master_key);
 	if (res)
 		goto out;
 
@@ -401,9 +475,26 @@ int fscrypt_get_encryption_info(struct inode *inode)
 			goto out;
 		}
 	}
-	if (cmpxchg(&inode->i_crypt_info, NULL, crypt_info) == NULL)
+	if (cmpxchg(&inode->i_crypt_info, NULL, crypt_info) == NULL) {
+		if (master_key) {
+			struct fscrypt_master_key *mk = master_key->payload.data;
+
+			atomic_inc(&mk->mk_refcount);
+			crypt_info->ci_key = key_get(master_key);
+			spin_lock(&mk->mk_decrypted_inodes_lock);
+			list_add(&crypt_info->ci_master_key_link,
+				 &mk->mk_decrypted_inodes);
+			spin_unlock(&mk->mk_decrypted_inodes_lock);
+		}
 		crypt_info = NULL;
+	}
 out:
+	if (master_key) {
+		struct fscrypt_master_key *mk = master_key->payload.data;
+
+		up_read(&mk->mk_secret_sem);
+		key_put(master_key);
+	}
 	if (res == -ENOKEY)
 		res = 0;
 	put_crypt_info(crypt_info);
@@ -418,3 +509,16 @@ void fscrypt_put_encryption_info(struct inode *inode)
 	inode->i_crypt_info = NULL;
 }
 EXPORT_SYMBOL(fscrypt_put_encryption_info);
+
+int fscrypt_drop_inode(struct inode *inode)
+{
+	const struct fscrypt_info *ci = READ_ONCE(inode->i_crypt_info);
+	const struct fscrypt_master_key *mk;
+
+	if (!ci || !ci->ci_key)
+		return 0;
+
+	mk = ci->ci_key->payload.data;
+	return !is_master_key_secret_present(&mk->mk_secret);
+}
+EXPORT_SYMBOL_GPL(fscrypt_drop_inode);

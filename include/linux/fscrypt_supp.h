@@ -29,6 +29,7 @@ struct fscrypt_operations {
 	bool (*dummy_context)(struct inode *);
 	bool (*empty_dir)(struct inode *);
 	unsigned int max_namelen;
+	bool supports_v2;
 };
 
 struct fscrypt_ctx {
@@ -77,6 +78,14 @@ extern void fscrypt_restore_control_page(struct page *);
 /* policy.c */
 extern int fscrypt_ioctl_set_policy(struct file *, const void __user *);
 extern int fscrypt_ioctl_get_policy(struct file *, void __user *);
+extern int fscrypt_ioctl_get_policy_ex(struct file *, void __user *);
+extern int fscrypt_ioctl_add_key(struct file *, void __user *);
+extern int fscrypt_ioctl_remove_key(struct file *, void __user *);
+extern int fscrypt_ioctl_remove_key_all_users(struct file *, void __user *);
+extern int fscrypt_ioctl_get_key_status(struct file *, void __user *);
+extern void fscrypt_sb_free(struct super_block *);
+extern int fscrypt_drop_inode(struct inode *);
+
 extern int fscrypt_has_permitted_context(struct inode *, struct inode *);
 extern int fscrypt_inherit_context(struct inode *, struct inode *,
 					void *, bool);

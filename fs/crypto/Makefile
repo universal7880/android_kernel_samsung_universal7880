@@ -1,4 +1,4 @@
 obj-$(CONFIG_FS_ENCRYPTION)	+= fscrypto.o
 
-fscrypto-y := crypto.o fname.o hkdf.o hooks.o keyinfo.o policy.o
+fscrypto-y := crypto.o fname.o hkdf.o hooks.o keyinfo.o keyring.o policy.o
 fscrypto-$(CONFIG_BLOCK) += bio.o
