@@ -133,6 +133,32 @@ extern bool fscrypt_fname_encrypted_size(const struct inode *inode,
 					 u32 orig_len, u32 max_len,
 					 u32 *encrypted_len_ret);
 
+/* hkdf.c */
+
+struct fscrypt_hkdf {
+	struct crypto_shash *hmac_tfm;
+};
+
+extern int fscrypt_init_hkdf(struct fscrypt_hkdf *hkdf, const u8 *master_key,
+			     unsigned int master_key_size);
+
+/*
+ * The list of contexts in which fscrypt uses HKDF.  These values are used as
+ * the first byte of the HKDF application-specific info string to guarantee that
+ * info strings are never repeated between contexts.  This ensures that all HKDF
+ * outputs are unique and cryptographically isolated, i.e. knowledge of one
+ * output doesn't reveal another.
+ */
+#define HKDF_CONTEXT_KEY_IDENTIFIER	1
+#define HKDF_CONTEXT_PER_FILE_KEY	2
+#define HKDF_CONTEXT_PER_MODE_KEY	3
+
+extern int fscrypt_hkdf_expand(struct fscrypt_hkdf *hkdf, u8 context,
+			       const u8 *info, unsigned int infolen,
+			       u8 *okm, unsigned int okmlen);
+
+extern void fscrypt_destroy_hkdf(struct fscrypt_hkdf *hkdf);
+
 /* keyinfo.c */
 extern void __exit fscrypt_essiv_cleanup(void);
 
