@@ -985,9 +985,6 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 	atomic_set(&ei->i_ioend_count, 0);
 	atomic_set(&ei->i_unwritten, 0);
 	INIT_WORK(&ei->i_rsv_conversion_work, ext4_end_io_rsv_work);
-#ifdef CONFIG_EXT4_FS_ENCRYPTION
-	ei->i_crypt_info = NULL;
-#endif
 	return &ei->vfs_inode;
 }
 
@@ -1066,8 +1063,7 @@ void ext4_clear_inode(struct inode *inode)
 		EXT4_I(inode)->jinode = NULL;
 	}
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
-	if (EXT4_I(inode)->i_crypt_info)
-		ext4_free_encryption_info(inode, EXT4_I(inode)->i_crypt_info);
+	fscrypt_put_encryption_info(inode);
 #endif
 }
 
@@ -1199,6 +1195,61 @@ static const struct quotactl_ops ext4_qctl_sysfile_operations = {
 	.get_dqblk	= dquot_get_dqblk,
 	.set_dqblk	= dquot_set_dqblk,
 	.get_nextdqblk	= dquot_get_next_dqblk,
+};
+#endif
+
+#ifdef CONFIG_EXT4_FS_ENCRYPTION
+static int ext4_get_context(struct inode *inode, void *ctx, size_t len)
+{
+	return ext4_xattr_get(inode, EXT4_XATTR_INDEX_ENCRYPTION,
+			      EXT4_XATTR_NAME_ENCRYPTION_CONTEXT, ctx, len);
+}
+
+static int ext4_set_context(struct inode *inode, const void *ctx, size_t len,
+			    void *fs_data)
+{
+	handle_t *handle = fs_data;
+	int err, stop_err;
+
+	if (!handle) {
+		err = ext4_convert_inline_data(inode);
+		if (err)
+			return err;
+		handle = ext4_journal_start(inode, EXT4_HT_MISC,
+					    EXT4_DATA_TRANS_BLOCKS(inode->i_sb));
+		if (IS_ERR(handle))
+			return PTR_ERR(handle);
+	}
+
+	err = ext4_xattr_set_handle(handle, inode, EXT4_XATTR_INDEX_ENCRYPTION,
+				   EXT4_XATTR_NAME_ENCRYPTION_CONTEXT,
+				   ctx, len, XATTR_CREATE);
+	if (!err) {
+		ext4_set_inode_flag(inode, EXT4_INODE_ENCRYPT);
+		ext4_set_inode_flags(inode);
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+		err = ext4_mark_inode_dirty(handle, inode);
+	}
+	if (!fs_data) {
+		stop_err = ext4_journal_stop(handle);
+		if (!err)
+			err = stop_err;
+	}
+	return err;
+}
+
+static bool ext4_dummy_context(struct inode *inode)
+{
+	return DUMMY_ENCRYPTION_ENABLED(EXT4_SB(inode->i_sb));
+}
+
+static const struct fscrypt_operations ext4_cryptops = {
+	.key_prefix	= "ext4:",
+	.get_context	= ext4_get_context,
+	.set_context	= ext4_set_context,
+	.dummy_context	= ext4_dummy_context,
+	.empty_dir	= ext4_empty_dir,
+	.max_namelen	= EXT4_NAME_LEN,
 };
 #endif
 
@@ -4326,6 +4377,9 @@ static int ext4_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_op = &ext4_sops;
 	sb->s_export_op = &ext4_export_ops;
 	sb->s_xattr = ext4_xattr_handlers;
+#ifdef CONFIG_EXT4_FS_ENCRYPTION
+	sb->s_cop = &ext4_cryptops;
+#endif
 #ifdef CONFIG_QUOTA
 	sb->dq_op = &ext4_quota_operations;
 	if (EXT4_HAS_RO_COMPAT_FEATURE(sb, EXT4_FEATURE_RO_COMPAT_QUOTA))
@@ -6221,7 +6275,6 @@ out7:
 
 static void __exit ext4_exit_fs(void)
 {
-	ext4_exit_crypto();
 	ext4_destroy_lazyinit_thread();
 	unregister_as_ext2();
 	unregister_as_ext3();

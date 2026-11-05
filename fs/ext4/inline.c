@@ -1345,7 +1345,7 @@ int htree_inlinedir_to_tree(struct file *dir_file,
 	struct ext4_iloc iloc;
 	void *dir_buf = NULL;
 	struct ext4_dir_entry_2 fake;
-	struct ext4_str tmp_str;
+	struct fscrypt_str tmp_str;
 
 	ret = ext4_get_inode_loc(inode, &iloc);
 	if (ret)
@@ -1787,7 +1787,7 @@ int empty_inline_dir(struct inode *dir, int *has_inline_data)
 		ext4_warning(dir->i_sb,
 			     "bad inline directory (dir #%lu) - no `..'",
 			     dir->i_ino);
-		ret = 1;
+		ret = true;
 		goto out;
 	}
 
@@ -1806,11 +1806,11 @@ int empty_inline_dir(struct inode *dir, int *has_inline_data)
 				     dir->i_ino, le32_to_cpu(de->inode),
 				     le16_to_cpu(de->rec_len), de->name_len,
 				     inline_size);
-			ret = 1;
+			ret = true;
 			goto out;
 		}
 		if (le32_to_cpu(de->inode)) {
-			ret = 0;
+			ret = false;
 			goto out;
 		}
 		offset += ext4_rec_len_from_disk(de->rec_len, inline_size);

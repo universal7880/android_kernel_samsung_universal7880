@@ -47,37 +47,6 @@
 #include "ext4.h"
 #include <trace/events/android_fs.h>
 
-/*
- * Call ext4_decrypt on every single page, reusing the encryption
- * context.
- */
-static void completion_pages(struct work_struct *work)
-{
-#ifdef CONFIG_EXT4_FS_ENCRYPTION
-	struct ext4_crypto_ctx *ctx =
-		container_of(work, struct ext4_crypto_ctx, r.work);
-	struct bio	*bio	= ctx->r.bio;
-	struct bio_vec	*bv;
-	int		i;
-
-	bio_for_each_segment_all(bv, bio, i) {
-		struct page *page = bv->bv_page;
-
-		int ret = ext4_decrypt(page);
-		if (ret) {
-			WARN_ON_ONCE(1);
-			SetPageError(page);
-		} else
-			SetPageUptodate(page);
-		unlock_page(page);
-	}
-	ext4_release_crypto_ctx(ctx);
-	bio_put(bio);
-#else
-	BUG();
-#endif
-}
-
 static inline bool ext4_bio_encrypted(struct bio *bio)
 {
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
@@ -119,14 +88,12 @@ static void mpage_end_io(struct bio *bio, int err)
 		ext4_trace_read_completion(bio, err);
 
 	if (ext4_bio_encrypted(bio)) {
-		struct ext4_crypto_ctx *ctx = bio->bi_private;
+		struct fscrypt_ctx *ctx = bio->bi_private;
 
 		if (err) {
-			ext4_release_crypto_ctx(ctx);
+			fscrypt_release_ctx(ctx);
 		} else {
-			INIT_WORK(&ctx->r.work, completion_pages);
-			ctx->r.bio = bio;
-			queue_work(ext4_read_workqueue, &ctx->r.work);
+			fscrypt_enqueue_decrypt_bio(ctx, bio);
 			return;
 		}
 	}
@@ -314,11 +281,11 @@ int ext4_mpage_readpages(struct address_space *mapping,
 			bio = NULL;
 		}
 		if (bio == NULL) {
-			struct ext4_crypto_ctx *ctx = NULL;
+			struct fscrypt_ctx *ctx = NULL;
 
 			if (ext4_encrypted_inode(inode) &&
 			    S_ISREG(inode->i_mode)) {
-				ctx = ext4_get_crypto_ctx(inode, GFP_NOFS);
+				ctx = fscrypt_get_ctx(inode, GFP_NOFS);
 				if (IS_ERR(ctx))
 					goto set_error_page;
 			}
@@ -326,7 +293,7 @@ int ext4_mpage_readpages(struct address_space *mapping,
 				min_t(int, nr_pages, bio_get_nr_vecs(bdev)));
 			if (!bio) {
 				if (ctx)
-					ext4_release_crypto_ctx(ctx);
+					fscrypt_release_ctx(ctx);
 				goto set_error_page;
 			}
 			bio->bi_bdev = bdev;

@@ -3198,7 +3198,7 @@ static int ext4_ext_zeroout(struct inode *inode, struct ext4_extent *ex)
 	ee_pblock = ext4_ext_pblock(ex);
 
 	if (ext4_encrypted_inode(inode))
-		return ext4_encrypted_zeroout(inode, ex);
+		return fscrypt_zeroout_range(inode, le32_to_cpu(ex->ee_block), ee_pblock, ee_len);
 
 	ret = sb_issue_zeroout(inode->i_sb, ee_pblock, ee_len, GFP_NOFS);
 	if (ret > 0)

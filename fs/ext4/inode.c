@@ -1002,7 +1002,7 @@ static int ext4_block_write_begin(struct page *page, loff_t pos, unsigned len,
 	if (unlikely(err))
 		page_zero_new_buffers(page, from, to);
 	else if (decrypt)
-		err = ext4_decrypt(page);
+		err = fscrypt_decrypt_page(inode, page, PAGE_SIZE, 0, page->index);
 	return err;
 }
 #endif
@@ -3543,9 +3543,9 @@ static int ext4_block_zero_page_range(handle_t *handle,
 		if (S_ISREG(inode->i_mode) &&
 		    ext4_encrypted_inode(inode)) {
 			/* We expect the key to be set. */
-			BUG_ON(!ext4_has_encryption_key(inode));
+			BUG_ON(!fscrypt_has_encryption_key(inode));
 			BUG_ON(blocksize != PAGE_CACHE_SIZE);
-			WARN_ON_ONCE(ext4_decrypt(page));
+			WARN_ON_ONCE(fscrypt_decrypt_page(inode, page, PAGE_SIZE, 0, page->index));
 		}
 	}
 	if (ext4_should_journal_data(inode)) {
@@ -3588,7 +3588,7 @@ static int ext4_block_truncate_page(handle_t *handle,
 
 	/* If we are processing an encrypted inode during orphan list
 	 * handling */
-	if (ext4_encrypted_inode(inode) && !ext4_has_encryption_key(inode))
+	if (ext4_encrypted_inode(inode) && !fscrypt_has_encryption_key(inode))
 		return 0;
 
 	blocksize = inode->i_sb->s_blocksize;
@@ -4139,8 +4139,10 @@ void ext4_set_inode_flags(struct inode *inode)
 		new_fl |= S_NOATIME;
 	if (flags & EXT4_DIRSYNC_FL)
 		new_fl |= S_DIRSYNC;
+	if (flags & EXT4_ENCRYPT_FL)
+		new_fl |= S_ENCRYPTED;
 	inode_set_flags(inode, new_fl,
-			S_SYNC|S_APPEND|S_IMMUTABLE|S_NOATIME|S_DIRSYNC);
+			S_SYNC|S_APPEND|S_IMMUTABLE|S_NOATIME|S_DIRSYNC|S_ENCRYPTED);
 }
 
 /* Propagate flags from i_flags to EXT4_I(inode)->i_flags */
