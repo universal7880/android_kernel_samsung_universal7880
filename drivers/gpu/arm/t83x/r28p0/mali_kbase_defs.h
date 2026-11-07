@@ -1509,6 +1509,16 @@ struct kbase_device {
 	struct kbase_mem_pool mem_pool;
 	struct kbase_mem_pool lp_mem_pool;
 	struct kbasep_mem_device memdev;
+
+	spinlock_t gpu_mem_lock;
+	struct list_head gpu_processes;
+	long gpu_accounted_pages;
+
+	struct list_head gpu_uids;
+	struct kbase_gpu_uid *gpu_work_slots[BASE_JM_MAX_NR_SLOTS];
+	struct hrtimer gpu_work_timer;
+	u64 gpu_work_last_ns;
+	bool gpu_work_sampling;
 	struct kbase_mmu_mode const *mmu_mode;
 
 	struct kbase_as as[BASE_MAX_NR_AS];
@@ -2047,6 +2057,8 @@ struct kbase_sub_alloc {
  * @atoms_count:          Number of gpu atoms currently in use, per priority
  */
 struct kbase_context {
+	struct kbase_gpu_process *gpu_process;
+	struct kbase_gpu_uid *gpu_uid;
 	struct file *filp;
 	struct kbase_device *kbdev;
 	struct kbase_mmu_table mmu;

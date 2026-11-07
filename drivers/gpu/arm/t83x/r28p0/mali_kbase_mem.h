@@ -106,6 +106,7 @@ struct kbase_aliased {
  * long as the tracked mappings objects are updated as part of the change.
  */
 struct kbase_mem_phy_alloc {
+	size_t gpu_import_pages;
 	struct kref           kref; /* number of users of this alloc */
 	atomic_t              gpu_mappings;
 	size_t                nents; /* 0..N */

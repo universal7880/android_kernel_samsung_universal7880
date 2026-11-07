@@ -73,6 +73,7 @@ SRC := \
 	mali_kbase_device.c \
 	mali_kbase_cache_policy.c \
 	mali_kbase_mem.c \
+	mali_kbase_gpu_accounting.c \
 	mali_kbase_mmu.c \
 	mali_kbase_ctx_sched.c \
 	mali_kbase_jd.c \

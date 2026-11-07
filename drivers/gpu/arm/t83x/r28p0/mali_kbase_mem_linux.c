@@ -46,6 +46,7 @@
 #include <linux/cache.h>
 
 #include <mali_kbase.h>
+#include <mali_kbase_gpu_accounting.h>
 #include <mali_kbase_mem_linux.h>
 #include <mali_kbase_tlstream.h>
 #include <mali_kbase_ioctl.h>
@@ -659,9 +660,7 @@ void kbase_mem_evictable_mark_reclaim(struct kbase_mem_phy_alloc *alloc)
 	int __maybe_unused new_page_count;
 
 	kbase_process_page_usage_dec(kctx, alloc->nents);
-	new_page_count = kbase_atomic_sub_pages(alloc->nents,
-						&kctx->used_pages);
-	kbase_atomic_sub_pages(alloc->nents, &kctx->kbdev->memdev.used_pages);
+	new_page_count = kbase_gpu_account_pages(kctx->kbdev, kctx, -(long)alloc->nents);
 
 	KBASE_TLSTREAM_AUX_PAGESALLOC(
 			kctx->id,
@@ -678,9 +677,7 @@ void kbase_mem_evictable_unmark_reclaim(struct kbase_mem_phy_alloc *alloc)
 	struct kbase_context *kctx = alloc->imported.native.kctx;
 	int __maybe_unused new_page_count;
 
-	new_page_count = kbase_atomic_add_pages(alloc->nents,
-						&kctx->used_pages);
-	kbase_atomic_add_pages(alloc->nents, &kctx->kbdev->memdev.used_pages);
+	new_page_count = kbase_gpu_account_pages(kctx->kbdev, kctx, (long)alloc->nents);
 
 	/* Increase mm counters so that the allocation is accounted for
 	 * against the process and thus is visible to the OOM killer,

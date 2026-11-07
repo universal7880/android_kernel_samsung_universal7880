@@ -27,6 +27,7 @@
  */
 
 #include <mali_kbase.h>
+#include <mali_kbase_gpu_accounting.h>
 #include <mali_midg_regmap.h>
 #include <mali_kbase_mem_linux.h>
 #include <mali_kbase_dma_fence.h>
@@ -117,6 +118,7 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	if (err)
 		goto free_kcpu_wq;
 
+	kbase_gpu_accounting_context_init(kctx);
 	err = kbase_mmu_init(kbdev, &kctx->mmu, kctx);
 	if (err)
 		goto term_dma_fence;
@@ -175,6 +177,7 @@ no_region_tracker:
 no_sink_page:
 	kbase_mmu_term(kbdev, &kctx->mmu);
 term_dma_fence:
+	kbase_gpu_accounting_context_term(kctx);
 	kbase_dma_fence_term(kctx);
 free_kcpu_wq:
 	kbase_event_cleanup(kctx);
@@ -315,6 +318,7 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	mutex_unlock(&kbdev->mmu_hw_mutex);
 
 	kbase_mmu_term(kbdev, &kctx->mmu);
+	kbase_gpu_accounting_context_term(kctx);
 
 	pages = atomic_read(&kctx->used_pages);
 	if (pages != 0)

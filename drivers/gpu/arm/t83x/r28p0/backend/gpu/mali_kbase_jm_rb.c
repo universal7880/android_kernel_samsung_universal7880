@@ -26,6 +26,7 @@
  */
 
 #include <mali_kbase.h>
+#include <mali_kbase_gpu_accounting.h>
 #include <mali_kbase_hwaccess_jm.h>
 #include <mali_kbase_jm.h>
 #include <mali_kbase_js.h>
@@ -101,6 +102,7 @@ static struct kbase_jd_atom *kbase_gpu_dequeue_atom(struct kbase_device *kbdev,
 	kbase_gpu_release_atom(kbdev, katom, end_timestamp);
 
 	rb->read_idx++;
+	kbase_gpu_work_switch(kbdev, js, NULL);
 
 	katom->gpu_rb_state = KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB;
 
@@ -1079,6 +1081,8 @@ void kbase_backend_slot_update(struct kbase_device *kbdev)
 				kbase_job_hw_submit(kbdev, katom[idx], js);
 				katom[idx]->gpu_rb_state =
 						KBASE_ATOM_GPU_RB_SUBMITTED;
+				if (!idx)
+					kbase_gpu_work_switch(kbdev, js, katom[idx]);
 
 				/* Inform power management at start/finish of
 				 * atom so it can update its GPU utilisation
@@ -1321,12 +1325,16 @@ void kbase_gpu_complete_hw(struct kbase_device *kbdev, int js,
 	 * - Schedule out the parent context if necessary, and schedule a new
 	 *   one in.
 	 */
-#ifdef CONFIG_GPU_TRACEPOINTS
 	{
 		/* The atom in the HEAD */
 		struct kbase_jd_atom *next_katom = kbase_gpu_inspect(kbdev, js,
 									0);
 
+		if (next_katom && next_katom->gpu_rb_state ==
+						KBASE_ATOM_GPU_RB_SUBMITTED)
+			kbase_gpu_work_switch(kbdev, js, next_katom);
+
+#ifdef CONFIG_GPU_TRACEPOINTS
 		if (next_katom && next_katom->gpu_rb_state ==
 						KBASE_ATOM_GPU_RB_SUBMITTED) {
 			char js_string[16];
@@ -1349,8 +1357,8 @@ void kbase_gpu_complete_hw(struct kbase_device *kbdev, int js,
 						0);
 			kbdev->hwaccess.backend.slot_rb[js].last_context = 0;
 		}
-	}
 #endif
+	}
 
 	if (kbdev->serialize_jobs & KBASE_SERIALIZE_RESET)
 		kbase_reset_gpu_silent(kbdev);
