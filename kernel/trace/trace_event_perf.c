@@ -24,8 +24,10 @@ static int	total_ref_count;
 static int perf_trace_event_perm(struct ftrace_event_call *tp_event,
 				 struct perf_event *p_event)
 {
+	int ret;
+
 	if (tp_event->perf_perm) {
-		int ret = tp_event->perf_perm(tp_event, p_event);
+		ret = tp_event->perf_perm(tp_event, p_event);
 		if (ret)
 			return ret;
 	}
@@ -44,8 +46,9 @@ static int perf_trace_event_perm(struct ftrace_event_call *tp_event,
 
 	/* The ftrace function trace is allowed only for root. */
 	if (ftrace_event_is_function(tp_event)) {
-		if (perf_paranoid_tracepoint_raw() && !capable(CAP_SYS_ADMIN))
-			return -EPERM;
+		ret = perf_allow_tracepoint();
+		if (ret)
+			return ret;
 
 		/*
 		 * We don't allow user space callchains for  function trace
@@ -77,10 +80,7 @@ static int perf_trace_event_perm(struct ftrace_event_call *tp_event,
 	 * ...otherwise raw tracepoint data can be a severe data leak,
 	 * only allow root to have these.
 	 */
-	if (perf_paranoid_tracepoint_raw() && !capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	return 0;
+	return perf_allow_tracepoint();
 }
 
 static int perf_trace_event_reg(struct ftrace_event_call *tp_event,

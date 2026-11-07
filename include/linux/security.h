@@ -189,6 +189,8 @@ static inline void security_free_mnt_opts(struct security_mnt_opts *opts)
 	opts->num_mnt_opts = 0;
 }
 
+struct perf_event;
+
 /**
  * struct security_operations - main security structure
  *
@@ -1441,6 +1443,14 @@ static inline void security_free_mnt_opts(struct security_mnt_opts *opts)
  */
 struct security_operations {
 	char name[SECURITY_NAME_MAX + 1];
+
+#ifdef CONFIG_PERF_EVENTS
+	int (*perf_event_open)(int type);
+	int (*perf_event_alloc)(struct perf_event *event);
+	void (*perf_event_free)(struct perf_event *event);
+	int (*perf_event_read)(struct perf_event *event);
+	int (*perf_event_write)(struct perf_event *event);
+#endif
 
 #ifdef CONFIG_BPF_SYSCALL
 	/* BPF object access and security-label lifetime hooks. */
@@ -3285,6 +3295,40 @@ static inline int yama_task_prctl(int option, unsigned long arg2,
 	return -ENOSYS;
 }
 #endif /* CONFIG_SECURITY_YAMA */
+
+#ifdef CONFIG_PERF_EVENTS
+#ifdef CONFIG_SECURITY
+int security_perf_event_open(int type);
+int security_perf_event_alloc(struct perf_event *event);
+void security_perf_event_free(struct perf_event *event);
+int security_perf_event_read(struct perf_event *event);
+int security_perf_event_write(struct perf_event *event);
+#else
+static inline int security_perf_event_open(int type)
+{
+	return 0;
+}
+
+static inline int security_perf_event_alloc(struct perf_event *event)
+{
+	return 0;
+}
+
+static inline void security_perf_event_free(struct perf_event *event)
+{
+}
+
+static inline int security_perf_event_read(struct perf_event *event)
+{
+	return 0;
+}
+
+static inline int security_perf_event_write(struct perf_event *event)
+{
+	return 0;
+}
+#endif /* CONFIG_SECURITY */
+#endif /* CONFIG_PERF_EVENTS */
 
 #endif /* ! __LINUX_SECURITY_H */
 

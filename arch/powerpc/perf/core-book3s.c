@@ -94,7 +94,8 @@ static inline unsigned long perf_ip_adjust(struct pt_regs *regs)
 {
 	return 0;
 }
-static inline void perf_get_data_addr(struct pt_regs *regs, u64 *addrp) { }
+static inline void perf_get_data_addr(struct perf_event *event,
+				      struct pt_regs *regs, u64 *addrp) { }
 static inline u32 perf_get_misc_flags(struct pt_regs *regs)
 {
 	return 0;
@@ -125,7 +126,8 @@ static unsigned long ebb_switch_in(bool ebb, struct cpu_hw_events *cpuhw)
 static inline void power_pmu_bhrb_enable(struct perf_event *event) {}
 static inline void power_pmu_bhrb_disable(struct perf_event *event) {}
 static void power_pmu_flush_branch_stack(void) {}
-static inline void power_pmu_bhrb_read(struct cpu_hw_events *cpuhw) {}
+static inline void power_pmu_bhrb_read(struct perf_event *event,
+				       struct cpu_hw_events *cpuhw) {}
 static void pmao_restore_workaround(bool ebb) { }
 #endif /* CONFIG_PPC32 */
 
@@ -169,7 +171,8 @@ static inline unsigned long perf_ip_adjust(struct pt_regs *regs)
  * pointed to by SIAR; this is indicated by the [POWER6_]MMCRA_SDSYNC, the
  * [POWER7P_]MMCRA_SDAR_VALID bit in MMCRA, or the SDAR_VALID bit in SIER.
  */
-static inline void perf_get_data_addr(struct pt_regs *regs, u64 *addrp)
+static inline void perf_get_data_addr(struct perf_event *event,
+				      struct pt_regs *regs, u64 *addrp)
 {
 	unsigned long mmcra = regs->dsisr;
 	bool sdar_valid;
@@ -189,8 +192,11 @@ static inline void perf_get_data_addr(struct pt_regs *regs, u64 *addrp)
 		sdar_valid = mmcra & sdsync;
 	}
 
-	if (!(mmcra & MMCRA_SAMPLE_ENABLE) || sdar_valid)
+	if (!(mmcra & MMCRA_SAMPLE_ENABLE) || sdar_valid) {
 		*addrp = mfspr(SPRN_SDAR);
+		if (!event->sample_kernel_addr && is_kernel_addr(*addrp))
+			*addrp = 0;
+	}
 }
 
 static bool regs_sihv(struct pt_regs *regs)
@@ -421,7 +427,8 @@ static __u64 power_pmu_bhrb_to(u64 addr)
 }
 
 /* Processing BHRB entries */
-static void power_pmu_bhrb_read(struct cpu_hw_events *cpuhw)
+static void power_pmu_bhrb_read(struct perf_event *event,
+				struct cpu_hw_events *cpuhw)
 {
 	u64 val;
 	u64 addr;
@@ -449,8 +456,7 @@ static void power_pmu_bhrb_read(struct cpu_hw_events *cpuhw)
 			 * exporting it to userspace (avoid exposure of regions
 			 * where we could have speculative execution)
 			 */
-			if (perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN) &&
-				is_kernel_addr(addr))
+			if (!event->sample_kernel_addr && is_kernel_addr(addr))
 				continue;
 
 			/* Branches are read most recent first (ie. mfbhrb 0 is
@@ -498,6 +504,10 @@ static void power_pmu_bhrb_read(struct cpu_hw_events *cpuhw)
 				cpuhw->bhrb_entries[u_index].mispred = pred;
 				cpuhw->bhrb_entries[u_index].predicted = ~pred;
 			}
+			if (!event->sample_kernel_addr &&
+			    (is_kernel_addr(cpuhw->bhrb_entries[u_index].from) ||
+			     is_kernel_addr(cpuhw->bhrb_entries[u_index].to)))
+				continue;
 			u_index++;
 
 		}
@@ -1800,6 +1810,13 @@ static int power_pmu_event_init(struct perf_event *event)
 		return -ENOENT;
 	}
 
+#ifdef CONFIG_PPC64
+	/* Cache the permission before the PMU interrupt can use the event. */
+	if (event->attr.sample_type & (PERF_SAMPLE_ADDR | PERF_SAMPLE_BRANCH_STACK))
+		event->sample_kernel_addr = event->parent ?
+			event->parent->sample_kernel_addr : !perf_allow_kernel();
+#endif
+
 	event->hw.config_base = ev;
 	event->hw.idx = 0;
 
@@ -1998,12 +2015,12 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 		perf_sample_data_init(&data, ~0ULL, event->hw.last_period);
 
 		if (event->attr.sample_type & PERF_SAMPLE_ADDR)
-			perf_get_data_addr(regs, &data.addr);
+			perf_get_data_addr(event, regs, &data.addr);
 
 		if (event->attr.sample_type & PERF_SAMPLE_BRANCH_STACK) {
 			struct cpu_hw_events *cpuhw;
 			cpuhw = &__get_cpu_var(cpu_hw_events);
-			power_pmu_bhrb_read(cpuhw);
+			power_pmu_bhrb_read(event, cpuhw);
 			data.br_stack = &cpuhw->bhrb_stack;
 		}
 

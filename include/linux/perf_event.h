@@ -52,6 +52,7 @@ struct perf_guest_info_callbacks {
 #include <linux/atomic.h>
 #include <linux/sysfs.h>
 #include <linux/perf_regs.h>
+#include <linux/security.h>
 #include <linux/workqueue.h>
 #include <asm/local.h>
 
@@ -326,6 +327,13 @@ struct ring_buffer;
  */
 struct perf_event {
 #ifdef CONFIG_PERF_EVENTS
+#ifdef CONFIG_SECURITY
+	void *security;
+#endif
+#ifdef CONFIG_PPC64
+	bool sample_kernel_addr;
+#endif
+
 	/*
 	 * entry onto perf_event_context::event_list;
 	 *   modifications require ctx->lock
@@ -827,6 +835,38 @@ static inline bool perf_paranoid_cpu(void)
 static inline bool perf_paranoid_kernel(void)
 {
 	return sysctl_perf_event_paranoid > 1;
+}
+
+/* SELinux checks for perf_event_open(2). */
+enum {
+	PERF_SECURITY_OPEN,
+	PERF_SECURITY_CPU,
+	PERF_SECURITY_KERNEL,
+	PERF_SECURITY_TRACEPOINT,
+};
+
+static inline int perf_allow_cpu(void)
+{
+	if (perf_paranoid_cpu() && !capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	return security_perf_event_open(PERF_SECURITY_CPU);
+}
+
+static inline int perf_allow_kernel(void)
+{
+	if (perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	return security_perf_event_open(PERF_SECURITY_KERNEL);
+}
+
+static inline int perf_allow_tracepoint(void)
+{
+	if (perf_paranoid_tracepoint_raw() && !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	return security_perf_event_open(PERF_SECURITY_TRACEPOINT);
 }
 
 extern void perf_event_init(void);

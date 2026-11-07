@@ -3385,17 +3385,22 @@ find_lively_task_by_vpid(pid_t vpid)
  * Returns a matching context with refcount and pincount.
  */
 static struct perf_event_context *
-find_get_context(struct pmu *pmu, struct task_struct *task, int cpu)
+find_get_context(struct perf_event *event, struct task_struct *task, int cpu)
 {
+	struct pmu *pmu = event->pmu;
 	struct perf_event_context *ctx, *clone_ctx = NULL;
 	struct perf_cpu_context *cpuctx;
 	unsigned long flags;
 	int ctxn, err;
 
 	if (!task) {
-		/* Must be root to operate on a CPU event: */
-		if (perf_paranoid_cpu() && !capable(CAP_SYS_ADMIN))
+		if (!is_kernel_event(event)) {
+			err = perf_allow_cpu();
+			if (err)
+				return ERR_PTR(err);
+		} else if (perf_paranoid_cpu() && !capable(CAP_SYS_ADMIN)) {
 			return ERR_PTR(-EACCES);
+		}
 
 		/*
 		 * We could be clever and allow to attach a event to an
@@ -3525,6 +3530,8 @@ static void unaccount_event(struct perf_event *event)
 
 static void __free_event(struct perf_event *event)
 {
+	security_perf_event_free(event);
+
 	/* Tracepoint detach may allocate and acquire bpf_event_mutex. */
 	if (event->attr.type == PERF_TYPE_TRACEPOINT)
 		perf_event_free_bpf_prog(event);
@@ -3862,6 +3869,10 @@ perf_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	struct perf_event_context *ctx;
 	int ret;
 
+	ret = security_perf_event_read(event);
+	if (ret)
+		return ret;
+
 	ctx = perf_event_ctx_lock(event);
 	ret = perf_read_hw(event, buf, count);
 	perf_event_ctx_unlock(event, ctx);
@@ -4116,6 +4127,10 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct perf_event *event = file->private_data;
 	struct perf_event_context *ctx;
 	long ret;
+
+	ret = security_perf_event_write(event);
+	if (ret)
+		return ret;
 
 	ctx = perf_event_ctx_lock(event);
 	ret = _perf_ioctl(event, cmd, arg);
@@ -4532,6 +4547,10 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
+
+	ret = security_perf_event_read(event);
+	if (ret)
+		return ret;
 
 	vma_size = vma->vm_end - vma->vm_start;
 	nr_pages = (vma_size / PAGE_SIZE) - 1;
@@ -7521,10 +7540,15 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (attr->inherit && (attr->sample_type & PERF_SAMPLE_READ))
 		goto err_ns;
 
-	pmu = perf_init_event(event);
-	if (!pmu)
+	err = security_perf_event_alloc(event);
+	if (err)
 		goto err_ns;
-	else if (IS_ERR(pmu)) {
+
+	pmu = perf_init_event(event);
+	if (!pmu) {
+		err = -EINVAL;
+		goto err_ns;
+	} else if (IS_ERR(pmu)) {
 		err = PTR_ERR(pmu);
 		goto err_ns;
 	}
@@ -7547,6 +7571,7 @@ err_pmu:
 		event->destroy(event);
 	module_put(pmu->module);
 err_ns:
+	security_perf_event_free(event);
 	perf_event_free_bpf_handler(event);
 	if (event->ns)
 		put_pid_ns(event->ns);
@@ -7652,9 +7677,11 @@ static int perf_copy_attr(struct perf_event_attr __user *uattr,
 			attr->branch_sample_type = mask;
 		}
 		/* privileged levels capture (kernel, hv): check permissions */
-		if ((mask & PERF_SAMPLE_BRANCH_PERM_PLM)
-		    && perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN))
-			return -EACCES;
+		if (mask & PERF_SAMPLE_BRANCH_PERM_PLM) {
+			ret = perf_allow_kernel();
+			if (ret)
+				return ret;
+		}
 	}
 
 	if (attr->sample_type & PERF_SAMPLE_REGS_USER) {
@@ -7811,9 +7838,16 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (err)
 		return err;
 
-	if (!attr.exclude_kernel) {
-		if (perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN))
-			return -EACCES;
+	err = security_perf_event_open(PERF_SECURITY_OPEN);
+	if (err)
+		return err;
+
+	if (!attr.exclude_kernel ||
+	    ((attr.sample_type & PERF_SAMPLE_CALLCHAIN) &&
+	     !attr.exclude_callchain_kernel)) {
+		err = perf_allow_kernel();
+		if (err)
+			return err;
 	}
 
 	if (attr.freq) {
@@ -7939,7 +7973,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	/*
 	 * Get the target context (task or percpu):
 	 */
-	ctx = find_get_context(pmu, task, event->cpu);
+	ctx = find_get_context(event, task, event->cpu);
 	if (IS_ERR(ctx)) {
 		err = PTR_ERR(ctx);
 		goto err_alloc;
@@ -8168,7 +8202,7 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 
 	account_event(event);
 
-	ctx = find_get_context(event->pmu, task, cpu);
+	ctx = find_get_context(event, task, cpu);
 	if (IS_ERR(ctx)) {
 		err = PTR_ERR(ctx);
 		goto err_free;

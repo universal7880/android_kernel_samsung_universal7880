@@ -31,6 +31,7 @@
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <linux/bpf.h>
+#include <linux/perf_event.h>
 #include <linux/xattr.h>
 #include <linux/capability.h>
 #include <linux/unistd.h>
@@ -6211,7 +6212,76 @@ static void selinux_bpf_prog_free(struct bpf_prog_aux *aux)
 }
 #endif
 
+#ifdef CONFIG_PERF_EVENTS
+static int selinux_perf_event_open(int type)
+{
+	u32 requested;
+	u32 sid = current_sid();
+
+	switch (type) {
+	case PERF_SECURITY_OPEN:
+		requested = PERF_EVENT__OPEN;
+		break;
+	case PERF_SECURITY_CPU:
+		requested = PERF_EVENT__CPU;
+		break;
+	case PERF_SECURITY_KERNEL:
+		requested = PERF_EVENT__KERNEL;
+		break;
+	case PERF_SECURITY_TRACEPOINT:
+		requested = PERF_EVENT__TRACEPOINT;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return avc_has_perm(sid, sid, SECCLASS_PERF_EVENT, requested, NULL);
+}
+
+static int selinux_perf_event_alloc(struct perf_event *event)
+{
+	struct perf_event_security_struct *perfsec;
+
+	perfsec = kzalloc(sizeof(*perfsec), GFP_KERNEL);
+	if (!perfsec)
+		return -ENOMEM;
+
+	perfsec->sid = current_sid();
+	event->security = perfsec;
+	return 0;
+}
+
+static void selinux_perf_event_free(struct perf_event *event)
+{
+	kfree(event->security);
+	event->security = NULL;
+}
+
+static int selinux_perf_event_read(struct perf_event *event)
+{
+	struct perf_event_security_struct *perfsec = event->security;
+
+	return avc_has_perm(current_sid(), perfsec->sid, SECCLASS_PERF_EVENT,
+			    PERF_EVENT__READ, NULL);
+}
+
+static int selinux_perf_event_write(struct perf_event *event)
+{
+	struct perf_event_security_struct *perfsec = event->security;
+
+	return avc_has_perm(current_sid(), perfsec->sid, SECCLASS_PERF_EVENT,
+			    PERF_EVENT__WRITE, NULL);
+}
+#endif /* CONFIG_PERF_EVENTS */
+
 static struct security_operations selinux_ops = {
+#ifdef CONFIG_PERF_EVENTS
+	.perf_event_open = selinux_perf_event_open,
+	.perf_event_alloc = selinux_perf_event_alloc,
+	.perf_event_free = selinux_perf_event_free,
+	.perf_event_read = selinux_perf_event_read,
+	.perf_event_write = selinux_perf_event_write,
+#endif
 #ifdef CONFIG_BPF_SYSCALL
 	.bpf = selinux_bpf,
 	.bpf_map = selinux_bpf_map,

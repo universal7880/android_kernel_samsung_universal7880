@@ -1575,3 +1575,39 @@ void security_bpf_prog_free(struct bpf_prog_aux *aux)
 		security_ops->bpf_prog_free_security(aux);
 }
 #endif /* CONFIG_BPF_SYSCALL */
+
+#ifdef CONFIG_PERF_EVENTS
+int security_perf_event_open(int type)
+{
+	if (security_ops->perf_event_open)
+		return security_ops->perf_event_open(type);
+	return 0;
+}
+
+int security_perf_event_alloc(struct perf_event *event)
+{
+	if (security_ops->perf_event_alloc)
+		return security_ops->perf_event_alloc(event);
+	return 0;
+}
+
+void security_perf_event_free(struct perf_event *event)
+{
+	if (security_ops->perf_event_free)
+		security_ops->perf_event_free(event);
+}
+
+int security_perf_event_read(struct perf_event *event)
+{
+	if (security_ops->perf_event_read)
+		return security_ops->perf_event_read(event);
+	return 0;
+}
+
+int security_perf_event_write(struct perf_event *event)
+{
+	if (security_ops->perf_event_write)
+		return security_ops->perf_event_write(event);
+	return 0;
+}
+#endif /* CONFIG_PERF_EVENTS */
